@@ -1,0 +1,73 @@
+#!/usr/bin/env python
+import sys
+import src.options
+from src.options import get_args
+from src.options import get_options
+from src.profile import Profile
+from src.profile import ProfileFactory
+from src.profile import Lineage
+from src.statistics import get_rank_statistics, print_abundance_stats, print_binary_stats
+
+
+def WriteStatistics(output: str, all_statistics_dict, all_abundance_statistics_dict):
+    with open(output, 'w') as out:
+        out.write('{}\t{}\t{}\t{}\t{}\n'.format(
+            "tool", "sample", "rank", "metric", "value"
+        ))
+        for tool, statistics_dict_list in all_statistics_dict.items():
+            abundance_dict_list = all_abundance_statistics_dict[tool]
+            dataset_num = 0
+            for statistics_dict, abundance_dict in zip(statistics_dict_list, abundance_dict_list):
+                dataset = str(dataset_num)
+                print_binary_stats(statistics_dict, tool, dataset, file_handle=out)
+                print_abundance_stats(abundance_dict, tool, dataset, file_handle=out)
+                dataset_num += 1
+
+
+def main_script():
+    opts = get_options()
+
+    print(opts.gold_std_files)
+
+    profile_factory = ProfileFactory()
+
+    stats_dict = dict()
+    abundance_stats_dict = dict()
+
+    for tool, files in opts.predictions.items():
+        if tool not in stats_dict:
+            stats_dict[tool] = []
+            abundance_stats_dict[tool] = []
+
+        for gold_std_file, prediction_file in zip(opts.gold_std_files, files):
+            gold_std = profile_factory(
+                gold_std_file,
+                name_column=opts.gold_columns['name'],
+                lineage_column=opts.gold_columns['lineage'],
+                abundance_column=opts.gold_columns['abundance'],
+                rank_column=opts.gold_columns['rank'])
+
+            print("GoldStandard")
+            print(gold_std.ToString())
+            print("\n\n\n")
+
+            print(tool, prediction_file)
+            print("Prediction file: {}".format(prediction_file))
+            prediction = profile_factory(
+                prediction_file,
+                name_column=opts.prediction_columns[tool]['name'],
+                lineage_column=opts.prediction_columns[tool]['lineage'],
+                abundance_column=opts.prediction_columns[tool]['abundance'],
+                rank_column=opts.prediction_columns[tool]['rank'])
+
+            print("\n\n\n_____________________________________________________________\n{} vs \n{}\n".format(gold_std_file, prediction_file))
+            rank_stats, abundance_stats = get_rank_statistics(gold_std, prediction)
+            stats_dict[tool].append(rank_stats)
+            abundance_stats_dict[tool].append(abundance_stats)
+
+    print("WRITE STATISTICS to {}".format(opts.output))
+    WriteStatistics(opts.output, stats_dict, abundance_stats_dict)
+
+if __name__ == '__main__':
+    main_script()
+    print("After")
