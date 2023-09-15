@@ -1,4 +1,4 @@
-from src.profile import Profile
+from src.profile import Profile, default_ranks
 from src.binary_statistics import BinaryStatistics
 from src.profile import RankTemp
 from src.profile import Rank
@@ -6,8 +6,6 @@ import scipy as sc
 import sys
 import math
 
-default_ranks = [Rank.DOMAIN, Rank.PHYLUM, Rank.CLASS, Rank.ORDER, Rank.FAMILY, Rank.GENUS,
-                 Rank.SPECIES]
 
 
 class AbundanceStatistics:
@@ -34,16 +32,16 @@ def bray_curtis(a, b):
     total_b = sum(b)
     shared_a = sum(va for va, vb in zip(a, b) if va > 0 and vb > 0)
     shared_b = sum(vb for va, vb in zip(a, b) if va > 0 and vb > 0)
-
-    print("Bray_Curtis")
-    print("gold: {}".format(a))
-    print("pred: {}".format(b))
-    print("total_gold: {}, total_pred: {}\tshared_gold: {}, pred_gold: {}".format(total_a, total_b, shared_a, shared_b))
-    print("min@ {}".format(min(shared_a, shared_b)))
-    print("(total_a + total_b): {}".format((total_a + total_b)))
+    #
+    # print("Bray_Curtis")
+    # print("gold: {}".format(a))
+    # print("pred: {}".format(b))
+    # print("total_gold: {}, total_pred: {}\tshared_gold: {}, pred_gold: {}".format(total_a, total_b, shared_a, shared_b))
+    # print("min@ {}".format(min(shared_a, shared_b)))
+    # print("(total_a + total_b): {}".format((total_a + total_b)))
     bc = (2*min(shared_a, shared_b) / (total_a + total_b))
 
-    print("Bray: {}".format(bc))
+    # print("Bray: {}".format(bc))
     return bc
 
 def euclidian(a,b):
@@ -53,30 +51,34 @@ def euclidian(a,b):
     return math.sqrt(sum)
 
 def get_rank_statistics(gold_profile: Profile, prediction_profile: Profile,
-                        ranks=default_ranks):
+                        ranks=default_ranks, labeled_profile_output=None):
     rank_dict = dict()
     abundance_stats = dict()
 
     for rank in ranks:
         stats = BinaryStatistics()
         abundance = AbundanceStatistics()
-        print(rank.name)
+        # print(rank.name)
+
 
         prediction_set = set(row.GetLineage().Get(rank) for row in prediction_profile.Rows())
         gold_set = set(row.GetLineage().Get(rank) for row in gold_profile.Rows())
-
-        print("-------- info: {}".format(rank.name))
-        print("gold: {}".format(gold_set))
-        print("pred: {}".format(prediction_set))
 
         shared = prediction_set.intersection(gold_set)
         pred_only = prediction_set.difference(gold_set)
         gold_only = gold_set.difference(prediction_set)
 
+        if len(shared) == 0:
+            print("prediction_set: {}" .format(prediction_set))
+            print("gold_set: {}" .format(gold_set))
+            input()
+
         gold_set = set(row.GetLineage().Get(rank) for row in gold_profile.Rows())
         stats.tp = len(shared)
         stats.fp = len(pred_only)
         stats.fn = len(gold_only)
+
+
 
         ##########################################################################################
         # Pearson correlation on shared taxa
@@ -86,10 +88,23 @@ def get_rank_statistics(gold_profile: Profile, prediction_profile: Profile,
         gold_vec = [gold_dict[key] for key in shared]
         pred_vec = [prediction_dict[key] for key in shared]
 
-        print(gold_vec)
-        print(pred_vec)
+        if labeled_profile_output:
+            print(shared)
+            print(pred_only)
+            print(gold_only)
+            for label in shared:
+                labeled_profile_output.write("{}\t{}\t{}\t{}\t{}\n".format(prediction_profile.name, "TP", "Prediction", label, prediction_dict[label]))
+                labeled_profile_output.write("{}\t{}\t{}\t{}\t{}\n".format(gold_profile.name, "TP", "Gold", label, gold_dict[label]))
+            for label in pred_only:
+                labeled_profile_output.write("{}\t{}\t{}\t{}\t{}\n".format(prediction_profile.name, "FP", "Prediction", label, prediction_dict[label]))
+            for label in gold_only:
+                labeled_profile_output.write("{}\t{}\t{}\t{}\t{}\n".format(gold_profile.name, "FN", "Gold", label, gold_dict[label]))
+
+
+        # print(gold_vec)
+        # print(pred_vec)
         if len(shared) > 1:
-            print(sc.stats.pearsonr(gold_vec, pred_vec))
+            # print(sc.stats.pearsonr(gold_vec, pred_vec))
             abundance.pearson_correlation_intersection = sc.stats.pearsonr(gold_vec, pred_vec).statistic
         else:
             abundance.pearson_correlation_intersection = 0
@@ -102,11 +117,11 @@ def get_rank_statistics(gold_profile: Profile, prediction_profile: Profile,
         pred_vec += [0.0 for _ in gold_only]
         pred_vec += [prediction_dict[key] for key in pred_only]
 
-        print(gold_vec)
-        print(pred_vec)
+        # print(gold_vec)
+        # print(pred_vec)
 
         if len(gold_vec) > 1:
-            print(sc.stats.pearsonr(gold_vec, pred_vec))
+            # print(sc.stats.pearsonr(gold_vec, pred_vec))
             abundance.pearson_correlation_union = sc.stats.pearsonr(gold_vec, pred_vec).statistic
         else:
             abundance.pearson_correlation_union = 0
@@ -120,11 +135,17 @@ def get_rank_statistics(gold_profile: Profile, prediction_profile: Profile,
         abundance.l2 = euclidian(gold_vec, pred_vec)
         ##########################################################################################
 
-        print("False negatives: {}".format(gold_set.difference(prediction_set)))
-        print("False positives: {}".format(prediction_set.difference(gold_set)))
+        # print("False negatives: {}".format(gold_set.difference(prediction_set)))
+        # print("False positives: {}".format(prediction_set.difference(gold_set)))
 
         abundance_stats[rank] = abundance
         rank_dict[rank] = stats
+
+        try:
+            stats.Validate()
+        except:
+            print(f"{gold_profile.name}\t{prediction_profile.name}\t{rank}")
+            exit(9)
 
     return rank_dict, abundance_stats
 

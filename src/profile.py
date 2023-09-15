@@ -20,6 +20,12 @@ class Rank(Enum):
     STRAIN = RankTemp('Strain', 7, 't__')
 
 
+default_ranks = [Rank.DOMAIN, Rank.PHYLUM, Rank.CLASS, Rank.ORDER, Rank.FAMILY, Rank.GENUS,
+                 Rank.SPECIES]
+
+rank_map = dict([(b.value.name, b) for a, b in enumerate(Rank)])
+
+
 class Lineage:
     def __init__(self):
         self.list = [""] * len(Rank)
@@ -72,11 +78,10 @@ class Profile:
 
     def ToString(self):
         outstr = "Name {}".format(self.name)
-        for name,row in self.name_to_abundance.items():
+        for name, row in self.name_to_abundance.items():
             outstr += row.ToString()
             outstr += '\n'
         return outstr
-
 
 
 class ProfileFactory:
@@ -109,7 +114,7 @@ class ProfileFactory:
 
     def GetLineage(self, lineage_str: str):
         lineage = Lineage()
-        tokens = lineage_str.split(';')
+        # tokens = lineage_str.split(';')
         tokens = self.DynamicSplit(lineage_str)
         for i in range(len(tokens)):
             lineage.Set(self.position_to_rank[i], tokens[i])
@@ -117,12 +122,17 @@ class ProfileFactory:
 
     def GetProfileEntry(self, name: str, lineage_str: str, abundance: float):
         lineage = self.GetLineage(lineage_str)
+
         return ProfileEntry(name, lineage, abundance)
 
     def __call__(self, file_path: str, name_column: int = 0, lineage_column: int = 1, abundance_column: int = 2,
                  rank_column: int = -1):
         profile = Profile()
-        print("File: {}".format(file_path))
+        profile.name = file_path.split('/')[-1]
+
+        # print(f"Profile Name: {file_path}")
+        # input()
+
         with open(file_path, 'r') as file:
             line_num = 0
             for line in file:
@@ -161,13 +171,17 @@ class ProfileFactory:
                     if str.lower(rank) != "species":
                         continue
 
+                # print(lineage)
                 profile.Add(self.GetProfileEntry(
                     name, lineage, abundance)
                 )
 
                 pentry = profile.Get(name)
+
+
                 # print("line {} {} {}".format(pentry.GetName(), pentry.GetLineage().Get(Rank.CLASS),
                 #                              pentry.GetAbundance()))
+                # input()
 
                 line_num += 1
 
@@ -177,7 +191,6 @@ class ProfileFactory:
             for row in profile.Rows():
                 row.abundance /= 100
             abundance_sum = sum(row.GetAbundance() for row in profile.Rows())
-            print(abundance_sum)
 
         # if abundance_sum > 50:
         #     print(abundance_sum)

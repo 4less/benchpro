@@ -4,7 +4,7 @@ import src.options
 from src.options import get_args
 from src.options import get_options
 from src.profile import Profile
-from src.profile import ProfileFactory
+from src.profile import ProfileFactory, Rank, rank_map, default_ranks
 from src.profile import Lineage
 from src.statistics import get_rank_statistics, print_abundance_stats, print_binary_stats
 
@@ -27,7 +27,9 @@ def WriteStatistics(output: str, all_statistics_dict, all_abundance_statistics_d
 def main_script():
     opts = get_options()
 
-    print(opts.gold_std_files)
+    profile_out = open("/usr/users/QIB_fr017/fritsche/Projects/benchpro/data/detailed_out/oral8.labeled.profile", 'w')
+
+    # print(opts.gold_std_files)
 
     profile_factory = ProfileFactory()
 
@@ -47,12 +49,12 @@ def main_script():
                 abundance_column=opts.gold_columns['abundance'],
                 rank_column=opts.gold_columns['rank'])
 
-            print("GoldStandard")
-            print(gold_std.ToString())
-            print("\n\n\n")
+            # print("GoldStandard")
+            # print(gold_std.ToString())
+            # print("\n\n\n")
 
-            print(tool, prediction_file)
-            print("Prediction file: {}".format(prediction_file))
+            # print(tool, prediction_file)
+            # print("Prediction file: {}".format(prediction_file))
             prediction = profile_factory(
                 prediction_file,
                 name_column=opts.prediction_columns[tool]['name'],
@@ -60,14 +62,15 @@ def main_script():
                 abundance_column=opts.prediction_columns[tool]['abundance'],
                 rank_column=opts.prediction_columns[tool]['rank'])
 
-            print("\n\n\n_____________________________________________________________\n{} vs \n{}\n".format(gold_std_file, prediction_file))
-            rank_stats, abundance_stats = get_rank_statistics(gold_std, prediction)
+            rank_stats, abundance_stats = get_rank_statistics(gold_std, prediction, ranks=opts.ranks,
+                                                              labeled_profile_output=profile_out)
             stats_dict[tool].append(rank_stats)
             abundance_stats_dict[tool].append(abundance_stats)
 
-    print("WRITE STATISTICS to {}".format(opts.output))
     WriteStatistics(opts.output, stats_dict, abundance_stats_dict)
+
+
+    profile_out.close()
 
 if __name__ == '__main__':
     main_script()
-    print("After")

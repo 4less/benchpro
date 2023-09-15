@@ -9,6 +9,11 @@ class BinaryStatistics:
         self.fp = 0
         self.fn = 0
 
+    def Validate(self):
+        if self.tp == 0:
+            raise Exception("Binary Stats are not right: {}\t{}\t{}\t{}".format(
+                self.tp, self.tn, self.fp, self.fn))
+
     def Sensitivity(self):
         return self.tp / (self.tp + self.fn)
 

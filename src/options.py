@@ -1,22 +1,21 @@
 import argparse
-
+from src.profile import ProfileFactory, Rank, rank_map, default_ranks
 
 class Options:
+
     def __init__(self):
         self.gold_std_files = []
         self.predictions = dict()
         self.prediction_columns = dict()
         self.gold_columns = dict()
         self.names = []
+        self.ranks = []
 
         self.output = ''
 
-
     def LoadPrediction(self, positional_argument: str):
         for name, tool in zip(self.names, positional_argument):
-            print(name, tool)
             self.predictions[name] = tool.rstrip(',').split(',')
-            print("{} -> {}".format(name, self.predictions[name]))
 
     def ParseGoldColumns(self, gold_columns_str: str):
         tokens=gold_columns_str.split('|')
@@ -35,12 +34,10 @@ class Options:
         if len(tool_strs) != len(self.predictions.keys()):
             print("asdsadasdasd")
             exit(9)
-        print(self.predictions.keys())
-        print(tool_strs)
         for tool, tool_str in zip(self.predictions.keys(), tool_strs):
             self.prediction_columns[tool] = dict()
             tokens = tool_str.split('|')
-            self.prediction_columns[tool]['name'] = int(tokens[0])
+            self.prediction_columns[tool]['name'] = -1 if tokens[0] == 'X' else int(tokens[0])
             self.prediction_columns[tool]['lineage'] = int(tokens[1])
             self.prediction_columns[tool]['abundance'] = int(tokens[2])
             if len(tokens) > 3:
@@ -56,6 +53,8 @@ def get_args():
                         help='File path to gold standard file')
     parser.add_argument('--names', dest='names', type=str,
                         help='names of individual profiles')
+    parser.add_argument('--ranks', dest='ranks', type=str, default=None,
+                        help='target ranks')
     parser.add_argument('--output', dest='output', type=str,
                         help='Output statistics file.')
     parser.add_argument('--gold_cols', dest='gold_columns', type=str, default='0|1|2',
@@ -74,7 +73,13 @@ def get_options():
     options.gold_std_files = args.gold_standard_files.rstrip(',').split(',')
     options.names = args.names.rstrip(',').split(',')
     options.output = args.output
+    options.ranks = args.ranks
     predictions = args.tool_predictions
+
+    if not options.ranks:
+        options.ranks = default_ranks
+    else:
+        options.ranks = [rank_map[t] for t in options.ranks.split(',')]
 
     if len(options.names) != len(predictions):
         print("length  of names {} does not match number of tools provided {}".format(len(options.names),
@@ -86,7 +91,6 @@ def get_options():
     options.ParsePredictionColumns(args.prediction_columns)
 
     for tool, files in options.predictions.items():
-        print(tool, files)
         if len(options.gold_std_files) != len(files):
             print(
                 "length  of files {} for tool {} does not match with number of gold std profiles {}"
