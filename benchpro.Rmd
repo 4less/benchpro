@@ -1,0 +1,162 @@
+---
+title: "benchpro"
+author: Joachim Fritscher
+date: October 23, 2022
+output: 
+  html_document:
+  toc: true
+  toc_float:
+  toc_collapsed: true
+  toc_depth: 3
+  number_sections: true
+  theme: lumen
+params:
+  input: input
+  tools: tools
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.width=12)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(knitr)
+library(pandoc)
+library(stringr)
+```
+
+
+
+```{r, echo=TRUE}
+# Setting up variables
+
+
+ranks <- c("Domain", "Phylum", "Class", "Order", "Family", "Genus", "Species", "Strain")
+ranks <- c("Phylum", "Class", "Order", "Family", "Genus", "Species")
+# print(paste("params: ", params))
+tools_subset <-unlist(str_split(params$tools, ","))
+```
+
+
+
+## Data analysis {.tabset}
+This RMarkdown is for creating reports as part of the benchpro profiler evaluation.
+
+```{r, echo=FALSE}
+dataset_path <- "/usr/users/QIB_fr017/fritsche/Projects/Results/CAMI-BENCHMARKS/results/combined_with_opal/combined.tsv"
+dataset_path <- "/usr/users/QIB_fr017/fritsche/Projects/Results/CAMI-MOUSEGUT/results/all_stats.tsv"
+dataset_path <- params$input
+
+
+ds <- read.csv(dataset_path, header=TRUE, sep='\t')
+
+if (length(unique(ds$dataset)) == 1) {
+  ds.all <- ds
+} else {
+  ds.tmp <- ds
+  ds.tmp$dataset <- "all"
+  ds.all <- rbind(ds.tmp, ds)
+  ds.all$tool <- factor(ds.all$tool)
+  remove(ds.tmp)
+  
+  ds.all$dataset <- factor(ds.all$dataset, levels=c("all", unique(ds$dataset)), ordered = TRUE)
+}
+  
+ds.all$sample <- factor(ds.all$sample)
+ds.all$rank <- factor(ds.all$rank, levels=c("Domain", "Phylum", "Class", "Order", "Family", "Genus", "Species", "Strain"), ordered = TRUE)
+ds.all$metric <- factor(ds.all$metric, levels=c("F1", "Sensitivity", "Precision", "TP", "TN", "FP", "FN", "PearsonCorrelationIntersect", "PearsonCorrelationUnion", "BrayCurtis", "L2"), ordered = TRUE)
+
+# if ("dataset" %in% unique(ds.all$dataset)) {
+#   ds.all$dataset <- factor(ds.all$dataset, levels=c("all", unique(ds$dataset)), ordered = TRUE)
+# }
+
+if (length(tools_subset) == 0) {
+  tools_subset <- unique(ds.all$tool)
+}
+tools_subset <- factor(tools_subset)
+summary(ds.all)
+```
+
+## Data analysis {.tabset}
+### Rank-wise analysis { .tabset }
+
+```{r, echo=FALSE, results="asis"}
+
+for (target_rank in rev(ranks)) {
+  contained <- target_rank %in% unique(ds.all$rank)
+  if (!contained) next
+  
+  asis_output(paste("##### ", target_rank, " level  \n", sep=""))
+  
+  
+  ds.plot <- ds.all %>% 
+    dplyr::filter(rank == target_rank & metric %in% c("F1", "Sensitivity", "Precision") & tool %in% tools_subset) %>% 
+    ggplot(aes(x=reorder(tool, -value), y=value, fill=tool)) +
+      ggtitle(target_rank) +
+      geom_violin()+
+      geom_boxplot(width=.2)+
+      #geom_boxplot() +
+      geom_jitter(color="black", size=0.4, alpha=0.2, height = 0) +
+      facet_grid(rows = vars(metric), cols = vars(dataset), scales="free_y") +
+      xlab("") + ylab("Value") + theme(axis.title.x=element_blank(),
+            axis.text.x=element_blank(),
+            axis.ticks.x=element_blank())
+  print(ds.plot)
+}
+
+```
+
+
+### Rank-wise abundance analysis { .tabset }
+
+```{r, echo=FALSE, results="asis"}
+for (target_rank in rev(ranks)) {
+  contained <- target_rank %in% unique(ds.all$rank)
+  if (!contained) next
+  
+  asis_output(paste("##### ", target_rank, " level  \n", sep=""))
+  
+  ds.plot <- ds.all %>% 
+    dplyr::filter(rank == target_rank & metric %in% c("PearsonCorrelationUnion", "PearsonCorrelationIntersect", "BrayCurtis", "L2") & tool %in% tools_subset) %>% 
+    ggplot(aes(x=reorder(tool, -value), y=value, fill=tool)) +
+      ggtitle(target_rank) +
+      geom_violin()+
+      geom_boxplot(width=.2)+
+      #geom_boxplot() +
+      geom_jitter(color="black", size=0.4, alpha=0.2, height = 0) +
+      facet_grid(rows = vars(metric), cols = vars(dataset), scales="free_y") +
+      xlab("") + ylab("Value") + theme(axis.title.x=element_blank(),
+            axis.text.x=element_blank(),
+            axis.ticks.x=element_blank())
+  print(ds.plot)
+}
+
+
+
+```
+
+
+### Tool-wise analysis { .tabset }
+
+```{r, echo=FALSE, results="asis"}
+for (target_tool in unique(ds.all$tool)) {
+  
+  asis_output(paste("##### ", target_tool, " level  \n", sep=""))
+  
+  ds.plot <- ds.all %>% 
+    dplyr::filter(tool == target_tool & metric %in% c("F1", "Sensitivity", "Precision")) %>%
+    ggplot(aes(x=rank, y=value, fill=rank)) +
+      ggtitle(target_tool) +
+      geom_violin()+
+      geom_boxplot(width=.2)+
+      #geom_boxplot() +
+      geom_jitter(color="black", size=0.4, alpha=0.2, height = 0) +
+      facet_grid(rows = vars(metric), cols = vars(dataset), scales="free_y") +
+      xlab("") + ylab("Value") + theme(axis.title.x=element_blank(),
+            axis.text.x=element_blank(),
+            axis.ticks.x=element_blank())
+  print(ds.plot)
+}
+
+
+```

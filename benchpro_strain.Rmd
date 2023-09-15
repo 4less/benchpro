@@ -1,0 +1,417 @@
+---
+title: "benchpro strain"
+author: Joachim Fritscher
+date: September 07, 2023
+output: 
+  html_document:
+  toc: true
+  toc_float:
+  toc_collapsed: true
+  toc_depth: 3
+  number_sections: true
+  theme: lumen
+params:
+  meta: meta
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.width=12)
+library(ape)
+library(ggtree)
+library(phytools)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(forcats)
+library(vegan)
+library(knitr)
+library(plotly)
+library(reshape2)
+```
+
+
+```{r, echo=FALSE}
+# Function definitions
+load_map <- function(map_file) {
+  csv <- read.csv(map_file, header=TRUE, sep='\t')
+  rownames(csv) <- csv$Name
+  return(csv)
+}
+
+load_meta <- function(meta_file) {
+  csv <- read.csv(meta_file, header=TRUE, sep='\t')
+  rownames(csv) <- csv[,1]
+  return(csv)
+}
+
+get_tree_dict <- function(names, paths, midpoint.root=TRUE) {
+  tree_dict <- list()
+
+  for (rid in 1:length(names)) {
+    name <- names[rid]
+    nwk.path <- paths[rid]
+    tree <- ape::read.tree(nwk.path)
+    if (midpoint.root) {
+      tree <- midpoint.root(tree)
+    }
+    tree_dict[[name]] <- tree
+  }
+  return(tree_dict)
+}
+
+generate_gold_std_tree <- function(tree, mapping) {
+  tag <- NA
+  old_species <- NA
+  for (rid in 1:nrow(mapping)) {
+    new_label <- mapping[rid, 1]
+    species <- mapping[rid, 2]
+    if (is.na(old_species)) old_species <- species
+    if (is.na(tag) || species != old_species) {
+      tag <- species
+      tree$tip.label[tree$tip.label == tag] <- new_label
+    } else {
+      index <- grep(tag, tree$tip.label)
+      if (length(index) > 1) {
+        return()
+      }
+      tree <- bind.tip(tree, new_label, edge.length=0, where=index, pos=0)
+    }
+    tag <- new_label
+    old_species <- species
+  }
+  return(tree)
+}
+
+get_meta_dict <- function(paths) {
+  meta_dict <- list()
+  
+  for (path in unique(paths)) {
+    meta_dict[[path]] <- load_meta(path)
+  }
+  return(meta_dict)
+}
+
+quicktree <- function(nwk.file, meta=NA, group_var=NA, midpoint=TRUE) {
+  tree <- ape::read.tree(nwk.file)
+  if (midpoint) {
+    tree <- midpoint.root(tree)
+  }
+  if (length(meta) != 1 || !is.na(meta)) {
+      tree.plot <- ggtree(tree, layout='circular') %<+% meta  +
+        geom_tippoint(aes(color=.data[[group_var]]), size=3) +
+        geom_tiplab(linesize=3, size=3, offset=0.001)+ theme(legend.position="None")
+  } else {
+    tree.plot <- ggtree(tree, layout='circular') +
+      geom_tippoint(size=3) +
+      geom_tiplab(linesize=3, size=3, offset=0.001)+ theme(legend.position="None")
+  return(meta_dict)
+  }
+  return(tree.plot)
+}
+
+quicktree <- function(tree, meta=NA, group_var=NA, midpoint=FALSE) {
+  if (midpoint) {
+    tree <- midpoint.root(tree)
+  }
+  if (length(meta) != 1 || !is.na(meta)) {  
+      tree.plot <- ggtree(tree, layout='circular') %<+% meta  +
+        geom_tippoint(aes(color=.data[[group_var]]), size=3) +
+        geom_tiplab(linesize=3, size=3, offset=0.001)+ theme(legend.position="None")
+  } else {
+    tree.plot <- ggtree(tree, layout='circular') +
+      geom_tippoint(size=3) +
+      geom_tiplab(linesize=3, size=3, offset=0.001)+ theme(legend.position="None")
+  }
+  return(tree.plot)
+}
+
+shared_tips_tree_dict <- function(tree_dict) {
+  new_tree_dict <- list()
+  common.tips <- Reduce(intersect, lapply(tree_dict, FUN=function(x){return(x$tip.label)}))
+  
+  for (name in names(tree_dict)) {
+    tree <- tree_dict[[name]]
+    new_tree_dict[[name]] <- ape::keep.tip(tree, common.tips)
+  }
+  return(new_tree_dict)
+}
+
+pairwise_mantel <- function(tree_dict) {
+  names_order <- tree_dict[[1]]$tip.label
+  cophenetic_list <- lapply(tree_dict, FUN=function(x){return(cophenetic.phylo(x)[names_order, names_order])})
+  
+  df <- data.frame(df = data.frame(matrix(nrow = 0, ncol = 3)) )
+  colnames(df) <- c("Name1", "Name2", "Cor")
+  
+  pairs <- t(combn(names(tree_dict),2))
+  for (rid in 1:nrow(pairs)) {
+    name1 <- pairs[rid, 1]
+    name2 <- pairs[rid, 2]
+    mcor <- mantel(cophenetic_list[[name1]], cophenetic_list[[name2]], method="spearman")
+    df[nrow(df) + 1,] <- c(name1, name2, mcor$statistic)
+  }
+  return(df)
+}
+
+
+tokey <- function(key1, key2) {
+  return(paste(min(key1, key2), max(key1, key2), collapse='_'))
+}
+
+pairwise_matrix_to_dict <- function(matrix, col1=1, col2=2, col_val=3) {
+  return_dict <- list()
+  
+  for (i in 1:nrow(matrix)) {
+    key1 <- matrix[i, col1]
+    key2 <- matrix[i, col2]
+    key <- tokey(key1, key2)
+    value <- matrix[i, col_val]
+    
+    return_dict[[key]] <- value
+  }
+  
+  return(return_dict)
+}
+
+gold_std_pairs_only <- function(mmatrix) {
+  first <- mmatrix[grep("gold_std", mmatrix$Name1),  c("Name2", "Name1", "Cor")]
+  second <- mmatrix[grep("gold_std", mmatrix$Name2),  c("Name1", "Name2", "Cor")]
+  
+  colnames(first) <- c("Name", "GoldStdName", "Cor")
+  colnames(second) <- c("Name", "GoldStdName", "Cor")
+  
+  return(rbind(first, second))
+}
+
+get_tree_meta <- function(name, map, meta.dict) {
+  md <- meta.dict[[map[map$Name == name, MAP_META_COL]]]
+  return(md)
+}
+
+get_name_to_group <- function(name, map, meta.dict, group_var) {
+  md <- get_tree_meta(name, map, meta.dict)
+  group_dict <- setNames(as.list(md[, group_var]), md$ID)
+  return(group_dict)
+}
+
+monophyly <- function(tree, tree.group) {
+  tree <- tree
+  monophyly.list <- c()
+  groups <- unique(tree.group)
+  for (group in groups) {
+    group.tips <- intersect(names(tree.group[tree.group %in% group]), tree$tip.label)
+    lca <- getMRCA(tree, group.tips[group.tips %in% tree$tip.label])
+    clade.tree <- extract.clade(tree, lca, collapse.singles = FALSE)
+    monophyly.item <- length(group.tips)/length(clade.tree$tip.label)
+    monophyly.list <- c(monophyly.list, monophyly.item)
+  }
+  return(setNames(as.list(monophyly.list), groups))
+}
+
+monophylies <- function(trees, map, meta.dict, group_name) {
+  df <- data.frame(df = data.frame(matrix(nrow = 0, ncol = 4)) )
+  colnames(df) <- c("Name", "Measure", "Group", "Value")
+  measure <- "Monophyly"
+  
+  for (name in names(trees)) {
+    tree <- trees[[name]]
+    tree.group <- get_name_to_group(name, map, meta.dict, group_name)
+    monophyly.list <- monophyly(tree, tree.group)
+    for (group in names(monophyly.list)) {
+      df[nrow(df)+1,] <- c(name, measure, group, monophyly.list[[group]])
+    }
+  }
+  df$Value <- as.numeric(df$Value)
+  return(df)
+}
+
+get_list <- function(m, meta) {
+  m[upper.tri(m)] <- NA
+  m.melt <- melt(m) %>% filter(!is.na(value))
+  colnames(m.melt) <- c("sample1", "sample2", "value")
+  m.melt$identity <- apply(m.melt, 1, function(x) {
+    return(meta[[x[1]]] == meta[[x[2]]])
+  })
+  return(m.melt)
+}
+
+pairwise_distance <-  function(tree, tree.group) {
+  tree.matrix <- cophenetic.phylo(tree)
+  tree.melt <- get_list(tree.matrix, tree.group)
+  tree.melt$value <- 1 - tree.melt$value
+  return(tree.melt)
+}
+
+pairwise_distances <- function(trees, meta.dict, group_name) {
+  result <- NA
+  for (name in names(trees)) {
+    tree <- trees[[name]]
+    
+    tree.group <- get_name_to_group(name, map, meta.dict, group_name)
+    tree.melt <- pairwise_distance(tree, tree.group)
+    tree.melt$Name <- name
+    if (is.null(nrow(result))) {
+      result <- tree.melt
+    } else {
+      result <- rbind(result, tree.melt)
+    }
+  }
+  return(result)
+}
+```
+
+
+
+```{r, echo=FALSE}
+MAP_NAME_COL <- "Name"
+MAP_TREE_COL <- "Tree"
+MAP_META_COL <- "Meta"
+META_GROUP_COL <- "genome"
+
+map.file <- "/usr/users/QIB_fr017/fritsche/Projects/benchpro/data/test_map.tsv"
+map <- load_map(map.file)
+
+tree.dict <- get_tree_dict(map[, MAP_NAME_COL], map[, MAP_TREE_COL])
+meta.dict <- get_meta_dict(map[, MAP_META_COL])
+
+tree_dict_shared_tips <- shared_tips_tree_dict(tree.dict)
+```
+
+
+
+```{r, echo=FALSE}
+# Example for turning roary tree into gold_std tree
+if (FALSE) {
+  gold_std <- ape::read.tree("/usr/users/QIB_fr017/fritsche/Projects/benchpro/data/test_trees/roary.vft.nwk")
+  col1 <- tree_dict_shared_tips[[1]]$tip.label
+  col2 <- gsub(".*GUT", "GUT", col1)
+  tip.map <- cbind(col1, col2)
+  tip.map <- tip.map[order(tip.map[,2],decreasing=FALSE),]
+  gold_tree <- generate_gold_std_tree(gold_std, tip.map)
+  ape::write.tree(gold_tree, "/usr/users/QIB_fr017/fritsche/Projects/benchpro/data/test_trees/akkermansia_mucin_gold_std.nwk")
+  quicktree(gold_tree, meta_dict[[1]], META_GROUP_COL)
+}
+
+```
+
+
+
+
+# Analysis {.tabset}
+
+## Monophyly Analysis
+
+```{r, echo=FALSE}
+
+
+# monophyly(ttree, group_dict)
+# 
+# monophyly(ttree, group_dict)
+
+monophyly.df <- monophylies(tree_dict_shared_tips, map, meta.dict, "genome")
+mono.plot.shared <- ggplot(monophyly.df, aes(x=Name, y=Value, fill=Name, group=Name)) +
+  geom_boxplot() + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+print(mono.plot.shared)
+
+monophyly.df <- monophylies(tree.dict, map, meta.dict, "genome")
+mono.plot.all <- ggplot(monophyly.df, aes(x=Name, y=Value, fill=Name, group=Name)) + 
+  geom_boxplot() + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+print(mono.plot.all)
+
+```
+
+
+## Strain Cluster & ANI based Analysis
+
+```{r, echo=FALSE}
+
+
+melts.shared <- pairwise_distances(tree_dict_shared_tips, meta.dict, "genome")
+melts.all <- pairwise_distances(tree.dict, meta.dict, "genome")
+
+inner_vs_outer <- melts
+
+melts.shared.meta <- cbind(melts.shared, map[melts.shared$Name, ]) %>% select(-c(Name))
+melts.all.meta <- cbind(melts.all, map[melts.all$Name, ]) %>% select(-c(Name))
+
+ani.plots.shared <- ggplot(melts.shared.meta, aes(x=identity, y=value, fill=identity)) +
+  #coord_cartesian(ylim=c(0.9, 1)) +
+  geom_boxplot() + 
+  geom_violin() + 
+  facet_grid(rows=vars(Tool), cols=vars(X), scales = "free_y")
+print(ani.plots.shared)
+
+ani.plots.all <- ggplot(melts.all.meta, aes(x=identity, y=value, fill=identity)) +
+  #coord_cartesian(ylim=c(0.9, 1)) +
+  geom_boxplot() + 
+  geom_violin() + 
+  facet_grid(rows=vars(Tool), cols=vars(X), scales = "free_y")
+print(ani.plots.all)
+```
+
+
+## Correlation analysis { .tabset }
+
+```{r, echo=FALSE, results="asis"}
+
+mantel.matrix <- pairwise_mantel(tree_dict_shared_tips)
+mantel.dict <- pairwise_matrix_to_dict(mantel.matrix)
+
+mantel.m <- gold_std_pairs_only(mantel.matrix)
+mantel.m$TreeTool <- map[mantel.m$Name, "X"]
+mantel.m$Species <- map[mantel.m$Name, "Species"]
+mantel.m$Tool <- ordered(map[mantel.m$Name, "Tool"])
+mantel.m$Cor <- as.numeric(mantel.m$Cor)
+#mantel.m$TreeTool <- ordered(mantel.m$TreeTool, levels=unique(mantel.m$TreeTool))
+#mantel.m$Tool <- with(mantel.m, factor(Tool, levels=unique(Tool[order(mantel.m$TreeTool)])))
+#mantel.m$Name <- with(mantel.m, factor(Name, levels=Name[order(mantel.m$TreeTool)]))
+
+
+mantel.plot <- ggplot(mantel.m, aes(x=Tool, y=Cor, fill=TreeTool)) + 
+  geom_bar(stat="identity", position="dodge") +
+  xlab("Tool") +
+  ylab("Correlation")
+
+print(mantel.plot)
+```
+
+
+
+
+
+
+
+
+
+
+## Trees { .tabset }
+
+```{r, echo=FALSE, results="asis"}
+
+children <- c()
+
+for (species in unique(map$Species)) {
+  child <- knitr::knit_child( text=c(paste('### ', gsub("__", "_", species), ' { .tabset }', sep='')), quiet=TRUE)
+  children <- c(children, child)
+  species_df <- map[map$Species == species,]
+  for (tool in unique(species_df$Tool)) {
+    child <- knitr::knit_child( text=c(paste('#### ', tool, ' { .tabset }', sep='')), quiet=TRUE)
+    children <- c(children, child)
+    
+    tool_df <- species_df[species_df$Tool == tool,]
+    for (tree_tool in unique(tool_df$X)) {
+      child <- knitr::knit_child( text=c(paste('##### ', tree_tool, ' { .tabset }', sep='')), quiet=TRUE)
+      children <- c(children, child)
+      textvar <- paste(species, tool, tree_tool)
+      subdf <- subset(tool_df, X == tree_tool)
+      
+      child <- knitr::knit_child(input="/usr/users/QIB_fr017/fritsche/Projects/benchpro/knit_tree_child.Rmd", envir=environment(), quiet = TRUE)
+      children <- c(children, child)
+    }
+  }
+}
+cat(children, sep='\n')
+
+
+```
+## {-}

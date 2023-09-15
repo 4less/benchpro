@@ -5,6 +5,7 @@ suppressWarnings(suppressMessages(library(argparse, warn.conflicts = F, quietly 
 suppressWarnings(suppressMessages(library(pandoc, warn.conflicts = F, quietly = T)))
 suppressWarnings(suppressMessages(library(R.utils, warn.conflicts = F, quietly = T)))
 
+print(getwd())
 
 #' current script file (in full path)
 #' @description current script file (in full path)
@@ -79,17 +80,19 @@ output <- args$output
 print(paste("output: ", output))
 print(paste("input:  ", input))
 if (!isAbsolutePath(input)) {
-  input <- file.path(getwd(), sub('./', '', args$output))
+  print(input)
+  input <- file.path(getwd(), sub('\\./', '', args$input))
+  print(input)
 }
 if (!isAbsolutePath(output)) {
   output <- file.path(getwd(), sub('./', '', output))
 }
 
-print(paste("output: ", output))
 print(paste("input:  ", input))
+print(paste("output: ", output))
 
 args_list = list(
-  input = args$input,
+  input = input,
   tools = args$tools
 )
 rmd_path <- "/usr/users/QIB_fr017/fritsche/Projects/benchpro/benchpro.Rmd"
