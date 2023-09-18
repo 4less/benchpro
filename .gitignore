@@ -1,0 +1,9 @@
+data/
+.fleet/
+.idea/
+benchplot/
+scripts/
+src/__pycache__
+streptococcus/
+*.html
+misc/

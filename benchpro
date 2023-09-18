@@ -1,47 +1,39 @@
 #!/usr/bin/env python
-import sys
-import src.options
-from src.options import get_args
 from src.options import get_options
-from src.profile import Profile
-from src.profile import ProfileFactory, Rank, rank_map, default_ranks
-from src.profile import Lineage
-from src.statistics import get_rank_statistics, print_abundance_stats, print_binary_stats
-
-
-def WriteStatistics(output: str, all_statistics_dict, all_abundance_statistics_dict):
-    with open(output, 'w') as out:
-        out.write('{}\t{}\t{}\t{}\t{}\n'.format(
-            "tool", "sample", "rank", "metric", "value"
-        ))
-        for tool, statistics_dict_list in all_statistics_dict.items():
-            abundance_dict_list = all_abundance_statistics_dict[tool]
-            dataset_num = 0
-            for statistics_dict, abundance_dict in zip(statistics_dict_list, abundance_dict_list):
-                dataset = str(dataset_num)
-                print_binary_stats(statistics_dict, tool, dataset, file_handle=out)
-                print_abundance_stats(abundance_dict, tool, dataset, file_handle=out)
-                dataset_num += 1
-
+from src.profile import ProfileFactory
+from src.statistics import get_rank_statistics, write_statistics
+from loguru import logger
+import os
 
 def main_script():
     opts = get_options()
-
-    profile_out = open("/usr/users/QIB_fr017/fritsche/Projects/benchpro/data/detailed_out/oral8.labeled.profile", 'w')
-
-    # print(opts.gold_std_files)
 
     profile_factory = ProfileFactory()
 
     stats_dict = dict()
     abundance_stats_dict = dict()
 
+    detailed_out = open(opts.detailed_output, 'w') if opts.detailed_output else None
+
+    logger.info(f"Number of prediction items: {len(opts.predictions)}")
     for tool, files in opts.predictions.items():
+        logger.info(f"Tool: {tool}\nFiles: {files}}}")
         if tool not in stats_dict:
             stats_dict[tool] = []
             abundance_stats_dict[tool] = []
 
+        if len(files) != len(opts.gold_std_files):
+            logger.exception(f"Number of prediction profiles ({len(files)}) is not the same as number of goldstd profiles ({len(opts.gold_std_files)})")
+        else:
+            logger.info(f"{len(files)} profile - goldstd pairs to process")
+
         for gold_std_file, prediction_file in zip(opts.gold_std_files, files):
+            if not os.path.exists(gold_std_file):
+                logger.exception(f"Gold Std file {gold_std_file} does not exist")
+            if not os.path.exists(prediction_file):
+                logger.exception(f"Prediction file {prediction_file} does not exist")
+
+            logger.info(f"Read Gold Standard File: {gold_std_file}")
             gold_std = profile_factory(
                 gold_std_file,
                 name_column=opts.gold_columns['name'],
@@ -49,12 +41,7 @@ def main_script():
                 abundance_column=opts.gold_columns['abundance'],
                 rank_column=opts.gold_columns['rank'])
 
-            # print("GoldStandard")
-            # print(gold_std.ToString())
-            # print("\n\n\n")
-
-            # print(tool, prediction_file)
-            # print("Prediction file: {}".format(prediction_file))
+            logger.info(f"Read Prediction File: {prediction_file}")
             prediction = profile_factory(
                 prediction_file,
                 name_column=opts.prediction_columns[tool]['name'],
@@ -62,15 +49,17 @@ def main_script():
                 abundance_column=opts.prediction_columns[tool]['abundance'],
                 rank_column=opts.prediction_columns[tool]['rank'])
 
+            logger.info(f"Compute statistics for ranks {opts.ranks}")
             rank_stats, abundance_stats = get_rank_statistics(gold_std, prediction, ranks=opts.ranks,
-                                                              labeled_profile_output=profile_out)
+                                                              labeled_profile_output=detailed_out)
             stats_dict[tool].append(rank_stats)
             abundance_stats_dict[tool].append(abundance_stats)
 
-    WriteStatistics(opts.output, stats_dict, abundance_stats_dict)
+    if detailed_out:
+        detailed_out.close()
 
+    write_statistics(opts.output, stats_dict, abundance_stats_dict)
 
-    profile_out.close()
 
 if __name__ == '__main__':
     main_script()

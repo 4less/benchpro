@@ -1,5 +1,5 @@
 import sys
-
+from loguru import logger
 
 class BinaryStatistics:
     def __init__(self):

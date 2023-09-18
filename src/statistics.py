@@ -67,6 +67,8 @@ def get_rank_statistics(gold_profile: Profile, prediction_profile: Profile,
         shared = prediction_set.intersection(gold_set)
         pred_only = prediction_set.difference(gold_set)
         gold_only = gold_set.difference(prediction_set)
+        pred_no_shared = prediction_set.difference(shared)
+        gold_no_shared = gold_set.difference(shared)
 
         if len(shared) == 0:
             print("prediction_set: {}" .format(prediction_set))
@@ -75,8 +77,8 @@ def get_rank_statistics(gold_profile: Profile, prediction_profile: Profile,
 
         gold_set = set(row.GetLineage().Get(rank) for row in gold_profile.Rows())
         stats.tp = len(shared)
-        stats.fp = len(pred_only)
-        stats.fn = len(gold_only)
+        stats.fp = len(pred_no_shared)
+        stats.fn = len(gold_no_shared)
 
 
 
@@ -180,3 +182,19 @@ def print_abundance_stats(stats_dict, name: str = '', dataset: str = '', sep: st
                                                   stats.bray_curtis))
         file_handle.write('{}{}{}{}\t{}\n'.format(prefix, dataset_prefix, rank, 'L2',
                                                   stats.l2))
+
+
+def write_statistics(output: str, all_statistics_dict, all_abundance_statistics_dict):
+    with open(output, 'w') as out:
+        out.write('{}\t{}\t{}\t{}\t{}\n'.format(
+            "tool", "sample", "rank", "metric", "value"
+        ))
+        for tool, statistics_dict_list in all_statistics_dict.items():
+            abundance_dict_list = all_abundance_statistics_dict[tool]
+            dataset_num = 0
+            for statistics_dict, abundance_dict in zip(statistics_dict_list, abundance_dict_list):
+                dataset = str(dataset_num)
+                print_binary_stats(statistics_dict, tool, dataset, file_handle=out)
+                print_abundance_stats(abundance_dict, tool, dataset, file_handle=out)
+                dataset_num += 1
+                

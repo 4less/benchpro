@@ -57,7 +57,7 @@ def get_args():
                         help='target ranks')
     parser.add_argument('--output', dest='output', type=str,
                         help='Output statistics file.')
-    parser.add_argument('--detailed_output', dest='output', type=str, default=None,
+    parser.add_argument('--detailed_output', dest='detailed_output', type=str, default=None,
                         help='Detailed output statistics file.')
     parser.add_argument('--gold_cols', dest='gold_columns', type=str, default='0|1|2',
                         help='Give column format for  gold standard profile. name_col|lineage_col|abundance_col(|rank_col :optional) (default: 0|1|2)')
@@ -75,6 +75,7 @@ def get_options():
     options.gold_std_files = args.gold_standard_files.rstrip(',').split(',')
     options.names = args.names.rstrip(',').split(',')
     options.output = args.output
+    options.detailed_output = args.detailed_output
     options.ranks = args.ranks
     predictions = args.tool_predictions
 

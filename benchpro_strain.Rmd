@@ -50,6 +50,8 @@ get_tree_dict <- function(names, paths, midpoint.root=TRUE) {
   for (rid in 1:length(names)) {
     name <- names[rid]
     nwk.path <- paths[rid]
+    
+    print(nwk.path)
     tree <- ape::read.tree(nwk.path)
     if (midpoint.root) {
       tree <- midpoint.root(tree)
@@ -209,8 +211,8 @@ monophyly <- function(tree, tree.group) {
 }
 
 monophylies <- function(trees, map, meta.dict, group_name) {
-  df <- data.frame(df = data.frame(matrix(nrow = 0, ncol = 4)) )
-  colnames(df) <- c("Name", "Measure", "Group", "Value")
+  df <- data.frame(df = data.frame(matrix(nrow = 0, ncol = 5)) )
+  colnames(df) <- c("Name", "Measure", "Group", "Species", "Value")
   measure <- "Monophyly"
   
   for (name in names(trees)) {
@@ -218,7 +220,7 @@ monophylies <- function(trees, map, meta.dict, group_name) {
     tree.group <- get_name_to_group(name, map, meta.dict, group_name)
     monophyly.list <- monophyly(tree, tree.group)
     for (group in names(monophyly.list)) {
-      df[nrow(df)+1,] <- c(name, measure, group, monophyly.list[[group]])
+      df[nrow(df)+1,] <- c(name, measure, group, map$Species[map$Name == name], monophyly.list[[group]])
     }
   }
   df$Value <- as.numeric(df$Value)
@@ -269,7 +271,10 @@ MAP_META_COL <- "Meta"
 META_GROUP_COL <- "genome"
 
 map.file <- "/usr/users/QIB_fr017/fritsche/Projects/benchpro/data/test_map.tsv"
+# map.file <- "/usr/users/QIB_fr017/fritsche/Projects/benchpro/data/SPECIES46/map_subset.tsv"
 map <- load_map(map.file)
+#map <- map[map$TreeTool == "iqtree",]
+
 
 tree.dict <- get_tree_dict(map[, MAP_NAME_COL], map[, MAP_TREE_COL])
 meta.dict <- get_meta_dict(map[, MAP_META_COL])
@@ -291,7 +296,29 @@ if (FALSE) {
   ape::write.tree(gold_tree, "/usr/users/QIB_fr017/fritsche/Projects/benchpro/data/test_trees/akkermansia_mucin_gold_std.nwk")
   quicktree(gold_tree, meta_dict[[1]], META_GROUP_COL)
 }
+testt <- tree.dict[[1]]
 
+
+if (FALSE) {
+for (treepath in map$Tree) {
+  tree <- ape::read.tree(treepath)
+  tiplabs <- c()
+  genomes <- c()
+  for (tip in tree$tip.label) {
+    print(tip)
+    for (c in c(2,5,10,20,30,50)) {
+      tiplabs <- c(tiplabs, paste("coverage", c, "_", tip, sep=""))
+      genomes <- c(genomes, tip)
+    }
+  }
+  tip.map <- cbind(tiplabs, genomes)
+  tip.map <- tip.map[order(tip.map[,2],decreasing=FALSE),]
+
+  gold_tree <- generate_gold_std_tree(tree, tip.map)
+    
+  ape::write.tree(gold_tree, paste(treepath, ".gold", sep=""))
+}
+}
 ```
 
 
@@ -307,17 +334,33 @@ if (FALSE) {
 # monophyly(ttree, group_dict)
 # 
 # monophyly(ttree, group_dict)
-
-monophyly.df <- monophylies(tree_dict_shared_tips, map, meta.dict, "genome")
-mono.plot.shared <- ggplot(monophyly.df, aes(x=Name, y=Value, fill=Name, group=Name)) +
-  geom_boxplot() + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
-print(mono.plot.shared)
+if (length(tree_dict_shared_tips) > 0){
+  monophyly.df <- monophylies(tree_dict_shared_tips, map, meta.dict, "genome")
+  mono.plot.shared <- ggplot(monophyly.df, aes(x=Name, y=Value, fill=Name, group=Name)) +
+    geom_boxplot() + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+  print(mono.plot.shared)
+}
 
 monophyly.df <- monophylies(tree.dict, map, meta.dict, "genome")
-mono.plot.all <- ggplot(monophyly.df, aes(x=Name, y=Value, fill=Name, group=Name)) + 
-  geom_boxplot() + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+monophyly.df$Tool <- map[monophyly.df$Name, "Tool"]
+mono.plot.all <- ggplot(monophyly.df, aes(x=Tool, y=Value, fill=Tool)) + 
+  geom_boxplot() + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  facet_wrap(~Species)#, ncol=1)
 print(mono.plot.all)
+mono.plot.all
 
+# for (species in unique(map$Species)) {
+#   print(species)
+#   print(nrow(map[map$Species == species,]))
+#   submap <- map[map$Species == species,]
+#   monophyly.df <- monophylies(tree.dict, submap, meta.dict, "genome")
+#   monophyly.df$Tool <- submap[monophyly.df$Name, "Tool"]
+#   mono.plot.all <- ggplot(monophyly.df, aes(x=Tool, y=Value, fill=Tool)) + 
+#     geom_boxplot() + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+#   print(mono.plot.all)
+#   #mono.plot.all
+#   print(species)
+# }
 ```
 
 
@@ -326,26 +369,30 @@ print(mono.plot.all)
 ```{r, echo=FALSE}
 
 
-melts.shared <- pairwise_distances(tree_dict_shared_tips, meta.dict, "genome")
+if (length(tree_dict_shared_tips) > 0){
+  melts.shared <- pairwise_distances(tree_dict_shared_tips, meta.dict, "genome")
+  
+  melts.shared.meta <- cbind(melts.shared, map[melts.shared$Name, ]) %>% select(-c(Name))
+  ani.plots.shared <- ggplot(melts.shared.meta, aes(x=identity, y=value, fill=identity)) +
+    #coord_cartesian(ylim=c(0.9, 1)) +
+    geom_boxplot() + 
+    geom_violin() + 
+    facet_grid(rows=vars(Tool), cols=vars(TreeTool), scales = "free_y")
+  print(ani.plots.shared)
+}
+
 melts.all <- pairwise_distances(tree.dict, meta.dict, "genome")
 
-inner_vs_outer <- melts
+#inner_vs_outer <- melts
 
-melts.shared.meta <- cbind(melts.shared, map[melts.shared$Name, ]) %>% select(-c(Name))
 melts.all.meta <- cbind(melts.all, map[melts.all$Name, ]) %>% select(-c(Name))
 
-ani.plots.shared <- ggplot(melts.shared.meta, aes(x=identity, y=value, fill=identity)) +
-  #coord_cartesian(ylim=c(0.9, 1)) +
-  geom_boxplot() + 
-  geom_violin() + 
-  facet_grid(rows=vars(Tool), cols=vars(X), scales = "free_y")
-print(ani.plots.shared)
 
 ani.plots.all <- ggplot(melts.all.meta, aes(x=identity, y=value, fill=identity)) +
   #coord_cartesian(ylim=c(0.9, 1)) +
   geom_boxplot() + 
   geom_violin() + 
-  facet_grid(rows=vars(Tool), cols=vars(X), scales = "free_y")
+  facet_grid(rows=vars(Tool), cols=vars(TreeTool), scales = "free_y")
 print(ani.plots.all)
 ```
 
@@ -354,25 +401,27 @@ print(ani.plots.all)
 
 ```{r, echo=FALSE, results="asis"}
 
-mantel.matrix <- pairwise_mantel(tree_dict_shared_tips)
-mantel.dict <- pairwise_matrix_to_dict(mantel.matrix)
-
-mantel.m <- gold_std_pairs_only(mantel.matrix)
-mantel.m$TreeTool <- map[mantel.m$Name, "X"]
-mantel.m$Species <- map[mantel.m$Name, "Species"]
-mantel.m$Tool <- ordered(map[mantel.m$Name, "Tool"])
-mantel.m$Cor <- as.numeric(mantel.m$Cor)
-#mantel.m$TreeTool <- ordered(mantel.m$TreeTool, levels=unique(mantel.m$TreeTool))
-#mantel.m$Tool <- with(mantel.m, factor(Tool, levels=unique(Tool[order(mantel.m$TreeTool)])))
-#mantel.m$Name <- with(mantel.m, factor(Name, levels=Name[order(mantel.m$TreeTool)]))
-
-
-mantel.plot <- ggplot(mantel.m, aes(x=Tool, y=Cor, fill=TreeTool)) + 
-  geom_bar(stat="identity", position="dodge") +
-  xlab("Tool") +
-  ylab("Correlation")
-
-print(mantel.plot)
+if (length(tree_dict_shared_tips) > 0){
+  mantel.matrix <- pairwise_mantel(tree_dict_shared_tips)
+  mantel.dict <- pairwise_matrix_to_dict(mantel.matrix)
+  
+  mantel.m <- gold_std_pairs_only(mantel.matrix)
+  mantel.m$TreeTool <- map[mantel.m$Name, "TreeTool"]
+  mantel.m$Species <- map[mantel.m$Name, "Species"]
+  mantel.m$Tool <- ordered(map[mantel.m$Name, "Tool"])
+  mantel.m$Cor <- as.numeric(mantel.m$Cor)
+  #mantel.m$TreeTool <- ordered(mantel.m$TreeTool, levels=unique(mantel.m$TreeTool))
+  #mantel.m$Tool <- with(mantel.m, factor(Tool, levels=unique(Tool[order(mantel.m$TreeTool)])))
+  #mantel.m$Name <- with(mantel.m, factor(Name, levels=Name[order(mantel.m$TreeTool)]))
+  
+  
+  mantel.plot <- ggplot(mantel.m, aes(x=Tool, y=Cor, fill=TreeTool)) + 
+    geom_bar(stat="identity", position="dodge") +
+    xlab("Tool") +
+    ylab("Correlation")
+  
+  print(mantel.plot)
+}
 ```
 
 
@@ -399,11 +448,11 @@ for (species in unique(map$Species)) {
     children <- c(children, child)
     
     tool_df <- species_df[species_df$Tool == tool,]
-    for (tree_tool in unique(tool_df$X)) {
+    for (tree_tool in unique(tool_df$TreeTool)) {
       child <- knitr::knit_child( text=c(paste('##### ', tree_tool, ' { .tabset }', sep='')), quiet=TRUE)
       children <- c(children, child)
       textvar <- paste(species, tool, tree_tool)
-      subdf <- subset(tool_df, X == tree_tool)
+      subdf <- subset(tool_df, TreeTool == tree_tool)
       
       child <- knitr::knit_child(input="/usr/users/QIB_fr017/fritsche/Projects/benchpro/knit_tree_child.Rmd", envir=environment(), quiet = TRUE)
       children <- c(children, child)
