@@ -1,5 +1,7 @@
+import os.path
 import sys
 from enum import Enum
+from loguru import logger
 
 
 class RankTemp:
@@ -31,13 +33,22 @@ class Lineage:
         self.list = [""] * len(Rank)
 
     def Get(self, rank: Rank):
+        if self.list[rank.value.index] == "":
+            logger.warning(f"{self.list} is empty at rank index {rank.value.index} for rank {rank}")
         return self.list[rank.value.index]
 
     def Set(self, rank: Rank, value: str):
         self.list[rank.value.index] = value
 
-    def ToString(self):
-        return '\t'.join(self.list)
+    def ToString(self, sep='\t'):
+        return sep.join(self.list)
+
+    def of_rank(self, rank):
+        return self.list[rank.value.index] and (rank.value.index + 1 == len(self.list) or not self.list[rank.value.index + 1])
+
+    def lowest_rank(self):
+        index = self.list.index("") - 1
+        return default_ranks[index]
 
 
 class ProfileEntry:
@@ -58,6 +69,15 @@ class ProfileEntry:
     def GetAbundance(self):
         return self.abundance
 
+    def AddAbundance(self, num):
+        self.abundance += num
+
+    def of_rank(self, rank):
+        return self.lineage.of_rank(rank)
+
+    def lowest_rank(self):
+        return self.lineage.lowest_rank()
+
 
 class Profile:
     def __init__(self):
@@ -73,8 +93,44 @@ class Profile:
             return None
         return self.name_to_abundance[name]
 
-    def Rows(self):
-        return self.name_to_abundance.values()
+    def Rows(self, rank=None):
+        # print("Rows {}".format(rank))
+        # print("length: {}".format(len(self.name_to_abundance.values())))
+        # if rank:
+        #     for v in self.name_to_abundance.values():
+        #         print("Value: {}".format(v))
+        #         print("{} of rank {}? {}".format(v.ToString(), rank, v.of_rank(rank)))
+        return self.name_to_abundance.values() if not rank else {value for value in self.name_to_abundance.values() if value.of_rank(rank)}
+
+    def infer_missing_abundances(self, rank):
+        rank_rows = self.Rows(rank)
+        target_ranks = [r for r in default_ranks if r.value.index < rank.value.index]
+
+        for trank in target_ranks:
+            for row in rank_rows:
+                name = row.GetLineage().Get(trank)
+                if name not in self.name_to_abundance:
+                    lineage = Lineage()
+                    for i in range(0, trank.value.index + 1):
+                        lineage.Set(default_ranks[i], row.GetLineage().Get(default_ranks[i]))
+                    self.name_to_abundance[name] = ProfileEntry(name, lineage, 0)
+                self.name_to_abundance[name].AddAbundance(row.GetAbundance())
+                logger.info(f"{name}: {row.GetAbundance()}")
+
+        print("After")
+        print(len(self.name_to_abundance))
+        # input()
+
+
+
+    def count_ranks(self):
+        rd = dict()
+        for row in self.Rows():
+            lowest_rank = row.lowest_rank()
+            if lowest_rank not in rd:
+                rd[lowest_rank] = 0
+            rd[lowest_rank] += 1
+        return rd
 
     def ToString(self):
         outstr = "Name {}".format(self.name)
@@ -114,7 +170,6 @@ class ProfileFactory:
 
     def GetLineage(self, lineage_str: str):
         lineage = Lineage()
-        # tokens = lineage_str.split(';')
         tokens = self.DynamicSplit(lineage_str)
         for i in range(len(tokens)):
             lineage.Set(self.position_to_rank[i], tokens[i])
@@ -132,26 +187,31 @@ class ProfileFactory:
 
         # print(f"Profile Name: {file_path}")
         # input()
-
+        print(file_path)
+        print("File Exists : {}".format(os.path.exists(file_path)))
         with open(file_path, 'r') as file:
             line_num = 0
             for line in file:
+                if len(line) == 0:
+                    logger.warning("line is empty {}".format(line))
+                    continue
+
                 line = line.rstrip()
                 tokens = line.split('\t')
                 if len(tokens) < 3:
-                    print("SHORTER: {}".format(tokens))
+                    logger.warning("SHORTER: {}".format(tokens))
 
                 if name_column >= len(tokens):
-                    print("skip.. {} >= {} {}".format(name_column, len(tokens), line))
+                    logger.warning("skip.. {} >= {} {}".format(name_column, len(tokens), line))
                     continue
                 if lineage_column >= len(tokens):
-                    print("skip..  {} >= {} {}".format(lineage_column, len(tokens), line))
+                    logger.warning("skip..  {} >= {} {}".format(lineage_column, len(tokens), line))
                     continue
                 if abundance_column >= len(tokens):
-                    print("skip..  {} >= {} {}".format(abundance_column, len(tokens), line))
+                    logger.warning("skip..  {} >= {} {}".format(abundance_column, len(tokens), line))
                     continue
                 if rank_column > -1 and rank_column >= len(tokens):
-                    print("skip..  {} >= {} {}".format(rank_column, len(tokens), line))
+                    logger.warning("skip..  {} >= {} {}".format(rank_column, len(tokens), line))
                     continue
 
                 name = str(line_num) if name_column == -1 else tokens[name_column]
@@ -161,39 +221,35 @@ class ProfileFactory:
                 try:
                     abundance = float(tokens[abundance_column])
                 except ValueError:
-                    print("Warning: {} is not convertible to float".format(abundance))
+                    logger.warning("Warning: {} is not convertible to float".format(tokens[abundance_column]))
                     continue
                 if abundance == 0:
                     continue
 
-                if rank_column > -1:
-                    rank = tokens[rank_column]
-                    if str.lower(rank) != "species":
-                        continue
+                # if rank_column > -1:
+                #     rank = tokens[rank_column]
+                #     if str.lower(rank) != "species":
+                #         logger.warning("skip no species {} because {}".format(line, rank_column))
+                #         continue
 
-                # print(lineage)
                 profile.Add(self.GetProfileEntry(
                     name, lineage, abundance)
                 )
 
-                pentry = profile.Get(name)
-
-
-                # print("line {} {} {}".format(pentry.GetName(), pentry.GetLineage().Get(Rank.CLASS),
-                #                              pentry.GetAbundance()))
-                # input()
-
                 line_num += 1
 
-        abundance_sum = sum(row.GetAbundance() for row in profile.Rows())
+        rank_counts = profile.count_ranks()
 
-        if abundance_sum > 99 and abundance_sum < 101:
-            for row in profile.Rows():
-                row.abundance /= 100
-            abundance_sum = sum(row.GetAbundance() for row in profile.Rows())
+        if len(rank_counts) == 1:
+            rank = [rank for rank in rank_counts][0]
+            profile.infer_missing_abundances(rank)
 
-        # if abundance_sum > 50:
-        #     print(abundance_sum)
-        #     exit(0)
+
+        for rank in default_ranks:
+            abundance_sum = sum(row.GetAbundance() for row in profile.Rows(rank))
+            if abundance_sum > 99 and abundance_sum < 101:
+                for row in profile.Rows(rank):
+                    row.abundance /= 100
+
 
         return profile

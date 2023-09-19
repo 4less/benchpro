@@ -2,6 +2,8 @@
 from src.options import get_options
 from src.profile import ProfileFactory
 from src.statistics import get_rank_statistics, write_statistics
+from src.per_sample_output import WorkbookLogSample
+
 from loguru import logger
 import os
 
@@ -13,10 +15,10 @@ def main_script():
     stats_dict = dict()
     abundance_stats_dict = dict()
 
-    detailed_out = open(opts.detailed_output, 'w') if opts.detailed_output else None
+    workbook_logger = WorkbookLogSample(opts.detailed_output) if opts.detailed_output else None
 
     logger.info(f"Number of prediction items: {len(opts.predictions)}")
-    for tool, files in opts.predictions.items():
+    for tool, files in opts.predictions.items():  # This is currently not really in use.
         logger.info(f"Tool: {tool}\nFiles: {files}}}")
         if tool not in stats_dict:
             stats_dict[tool] = []
@@ -33,6 +35,7 @@ def main_script():
             if not os.path.exists(prediction_file):
                 logger.exception(f"Prediction file {prediction_file} does not exist")
 
+
             logger.info(f"Read Gold Standard File: {gold_std_file}")
             gold_std = profile_factory(
                 gold_std_file,
@@ -41,6 +44,7 @@ def main_script():
                 abundance_column=opts.gold_columns['abundance'],
                 rank_column=opts.gold_columns['rank'])
 
+            logger.info(f"{len(gold_std.Rows())} in Gold Std profile")
             logger.info(f"Read Prediction File: {prediction_file}")
             prediction = profile_factory(
                 prediction_file,
@@ -49,14 +53,18 @@ def main_script():
                 abundance_column=opts.prediction_columns[tool]['abundance'],
                 rank_column=opts.prediction_columns[tool]['rank'])
 
+            logger.info(f"{len(prediction.Rows())} in prediction profile")
+
             logger.info(f"Compute statistics for ranks {opts.ranks}")
             rank_stats, abundance_stats = get_rank_statistics(gold_std, prediction, ranks=opts.ranks,
-                                                              labeled_profile_output=detailed_out)
+                                                              workbook_logger=workbook_logger)
             stats_dict[tool].append(rank_stats)
             abundance_stats_dict[tool].append(abundance_stats)
 
-    if detailed_out:
-        detailed_out.close()
+    if workbook_logger:
+        workbook_logger.save()
+        workbook_logger.print_xsv()
+        print("Saved workbook to: {}".format(workbook_logger.output_path))
 
     write_statistics(opts.output, stats_dict, abundance_stats_dict)
 
