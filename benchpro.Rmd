@@ -64,7 +64,7 @@ if (length(unique(ds$dataset)) == 1) {
   
 ds.all$sample <- factor(ds.all$sample)
 ds.all$rank <- factor(ds.all$rank, levels=c("Domain", "Phylum", "Class", "Order", "Family", "Genus", "Species", "Strain"), ordered = TRUE)
-ds.all$metric <- factor(ds.all$metric, levels=c("F1", "Sensitivity", "Precision", "TP", "TN", "FP", "FN", "PearsonCorrelationIntersect", "PearsonCorrelationUnion", "BrayCurtis", "L2"), ordered = TRUE)
+ds.all$metric <- factor(ds.all$metric, levels=c("F1", "Sensitivity", "Precision", "TP", "TN", "FP", "FN", "PearsonCorrelationIntersect", "PearsonCorrelationUnion", "BrayCurtisIntersect", "BrayCurtisUnion", "L2Intersect", "L2Union"), ordered = TRUE)
 
 # if ("dataset" %in% unique(ds.all$dataset)) {
 #   ds.all$dataset <- factor(ds.all$dataset, levels=c("all", unique(ds$dataset)), ordered = TRUE)
@@ -117,7 +117,7 @@ for (target_rank in rev(ranks)) {
   asis_output(paste("##### ", target_rank, " level  \n", sep=""))
   
   ds.plot <- ds.all %>% 
-    dplyr::filter(rank == target_rank & metric %in% c("PearsonCorrelationUnion", "PearsonCorrelationIntersect", "BrayCurtis", "L2") & tool %in% tools_subset) %>% 
+    dplyr::filter(rank == target_rank & metric %in% c("PearsonCorrelationUnion", "PearsonCorrelationIntersect", "BrayCurtisUnion", "BrayCurtisIntersect", "L2Union", "L2Intersect") & tool %in% tools_subset) %>% 
     ggplot(aes(x=reorder(tool, -value), y=value, fill=tool)) +
       ggtitle(target_rank) +
       geom_violin()+

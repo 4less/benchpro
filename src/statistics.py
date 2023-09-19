@@ -83,47 +83,41 @@ def get_rank_statistics(gold_profile: Profile, prediction_profile: Profile,
 
 
         ##########################################################################################
-        # Pearson correlation on shared taxa
+        # Get abundance dicts for abundance statistics
 
         gold_dict = get_abundance_dict(gold_profile, rank)
         prediction_dict = get_abundance_dict(prediction_profile, rank)
         gold_vec = [gold_dict[key] for key in shared]
         pred_vec = [prediction_dict[key] for key in shared]
 
-        if workbook_logger:
-            workbook_logger.add_sample(gold_profile.name, gold_dict, prediction_dict)
-
-        if len(gold_vec) > 1:
-            # print(sc.stats.pearsonr(gold_vec, pred_vec))
-            abundance.pearson_correlation_intersection = sc.stats.pearsonr(gold_vec, pred_vec).statistic
-        else:
-            abundance.pearson_correlation_intersection = 0
-
-        ##########################################################################################
-        # Pearson correlation on union taxa
-
-        logger.info("Pearson correlation: shared taxa {}".format(len(gold_vec)))
+        logger.info("Shared taxa {}".format(len(gold_vec)))
+        logger.info("Shared taxa: GoldStd Sum {}, Prediction Sum {}".format(sum(gold_vec), sum(pred_vec)))
 
         gold_vec_union = gold_vec + [value for key, value in gold_dict.items() if key not in prediction_dict]
         pred_vec_union = pred_vec + [0.0 for key in gold_dict if key not in prediction_dict]
         pred_vec_union += [value for key, value in prediction_dict.items() if key not in gold_dict]
         gold_vec_union += [0.0 for key in prediction_dict if key not in gold_dict]
 
-        logger.info("Pearson correlation: union taxa {}".format(len(gold_vec_union)))
+        logger.info("Union taxa {}".format(len(gold_vec_union)))
+        logger.info("Union taxa abundances {}".format(gold_vec_union))
+        logger.info("Union taxa: GoldStd Sum {}, Prediction Sum {}".format(sum(gold_vec_union), sum(pred_vec_union)))
+        if workbook_logger:
+            workbook_logger.add_sample(gold_profile.name, gold_dict, prediction_dict)
 
-        if len(gold_vec_union) > 1:
-            # print(sc.stats.pearsonr(gold_vec, pred_vec))
-            abundance.pearson_correlation_union = sc.stats.pearsonr(gold_vec_union, pred_vec_union).statistic
-        else:
-            abundance.pearson_correlation_union = 0
 
+        ##########################################################################################
+        # Pearson correlation
+        abundance.pearson_correlation_intersection = sc.stats.pearsonr(gold_vec, pred_vec).statistic if len(gold_vec) > 1 else 0
+        abundance.pearson_correlation_union = sc.stats.pearsonr(gold_vec_union, pred_vec_union).statistic if len(gold_vec) > 1 else 0
+
+        logger.info("Pearson Correlation Shared {} Union {}".format(abundance.pearson_correlation_intersection, abundance.pearson_correlation_union))
 
         ##########################################################################################
         # Bray-Curtis
         abundance.bray_curtis_intersection = bray_curtis(gold_vec, pred_vec)
         abundance.bray_curtis_union = bray_curtis(gold_vec_union, pred_vec_union)
 
-        logger.info("Bray-Curtis Shared {} Union {}".format(bray_curtis(gold_vec, pred_vec), bray_curtis(pred_vec_union, gold_vec_union)))
+        logger.info("Bray-Curtis Shared {} Union {}".format(abundance.bray_curtis_intersection, abundance.bray_curtis_union))
 
         ##########################################################################################
         # Euclidean (L2)
