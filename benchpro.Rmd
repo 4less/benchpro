@@ -34,7 +34,7 @@ library(stringr)
 ranks <- c("Domain", "Phylum", "Class", "Order", "Family", "Genus", "Species", "Strain")
 ranks <- c("Phylum", "Class", "Order", "Family", "Genus", "Species")
 # print(paste("params: ", params))
-tools_subset <-unlist(str_split(params$tools, ","))
+# tools_subset <-unlist(str_split(params$tools, ","))
 ```
 
 
@@ -44,11 +44,11 @@ This RMarkdown is for creating reports as part of the benchpro profiler evaluati
 
 ```{r, echo=FALSE}
 dataset_path <- "/usr/users/QIB_fr017/fritsche/Projects/Results/CAMI-BENCHMARKS/results/combined_with_opal/combined.tsv"
-dataset_path <- "/usr/users/QIB_fr017/fritsche/Projects/Results/CAMI-MOUSEGUT/results/all_stats.tsv"
+dataset_path <- "/media/fritsche/Extreme_SSD/results/CAMI/HumanToy/Benchmark/tmp/output.tsv"
 dataset_path <- params$input
 
 
-ds <- read.csv(dataset_path, header=TRUE, sep='\t')
+ds <- read.csv(dataset_path, header=TRUE, sep='\t', row.names=NULL)
 
 if (length(unique(ds$dataset)) == 1) {
   ds.all <- ds
@@ -70,9 +70,10 @@ ds.all$metric <- factor(ds.all$metric, levels=c("F1", "Sensitivity", "Precision"
 #   ds.all$dataset <- factor(ds.all$dataset, levels=c("all", unique(ds$dataset)), ordered = TRUE)
 # }
 
-if (length(tools_subset) == 0) {
-  tools_subset <- unique(ds.all$tool)
-}
+# if (length(tools_subset) == 0) {
+#   tools_subset <- unique(ds.all$tool)
+# }
+tools_subset <- unique(ds.all$tool)
 tools_subset <- factor(tools_subset)
 summary(ds.all)
 ```

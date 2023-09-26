@@ -1,6 +1,6 @@
 class BinaryStatistics:
-    def __init__(self):
-        self.name = ""
+    def __init__(self, name):
+        self.name = name
         self.tp = 0
         self.tn = 0
         self.fp = 0

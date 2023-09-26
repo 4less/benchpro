@@ -80,8 +80,8 @@ class ProfileEntry:
 
 
 class Profile:
-    def __init__(self):
-        self.name = ''
+    def __init__(self, name):
+        self.name = name
         self.name_to_abundance = dict()
 
     def Add(self, entry: ProfileEntry):
@@ -180,10 +180,9 @@ class ProfileFactory:
 
         return ProfileEntry(name, lineage, abundance)
 
-    def __call__(self, file_path: str, name_column: int = 0, lineage_column: int = 1, abundance_column: int = 2,
+    def __call__(self, file_path: str, profile_name: str, name_column: int = 0, lineage_column: int = 1, abundance_column: int = 2,
                  rank_column: int = -1):
-        profile = Profile()
-        profile.name = file_path.split('/')[-1]
+        profile = Profile(profile_name)
 
         # print(f"Profile Name: {file_path}")
         # input()

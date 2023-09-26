@@ -9,7 +9,8 @@ from loguru import logger
 
 
 class AbundanceStatistics:
-    def __init__(self):
+    def __init__(self, name):
+        self.name = name
         self.pearson_correlation_intersection = 0
         self.pearson_correlation_union = 0
         self.bray_curtis_intersection = 0
@@ -51,18 +52,22 @@ def euclidian(a,b):
 def get_rank_statistics(gold_profile: Profile, prediction_profile: Profile,
                         ranks=default_ranks, workbook_logger=None):
 
-    logger.info(f"{get_rank_statistics} for {gold_profile.name} and {prediction_profile.name}")
+    logger.info(f"Get rank statistics for {gold_profile.name} and {prediction_profile.name}")
     rank_dict = dict()
     abundance_stats = dict()
 
+
+    logger.info(f"Process ranks: {ranks}")
     for rank in ranks:
         logger.info(f"Process rank: {rank}")
-        stats = BinaryStatistics()
-        abundance = AbundanceStatistics()
+
+        stats = BinaryStatistics(prediction_profile.name)
+        abundance = AbundanceStatistics(prediction_profile.name)
 
 
         prediction_set = set(row.GetLineage().Get(rank) for row in prediction_profile.Rows(rank))
         gold_set = set(row.GetLineage().Get(rank) for row in gold_profile.Rows(rank))
+
 
         shared = prediction_set.intersection(gold_set)
         pred_only = prediction_set.difference(gold_set)
@@ -139,53 +144,62 @@ def get_rank_statistics(gold_profile: Profile, prediction_profile: Profile,
     return rank_dict, abundance_stats
 
 
-def print_binary_stats(stats_dict, name: str = '', dataset: str = '', sep: str = '\t', file_handle=sys.stdout):
-    prefix = '{}{}'.format(name, sep) if name else ''
-    dataset_prefix = '{}{}'.format(dataset, sep) if name else ''
+def print_binary_stats(stats_dict, tool: str = '', sample: str = '', dataset: str = '', sep: str = '\t', file_handle=sys.stdout, extra_metadata=None):
 
     for rank, stats in stats_dict.items():
-        rank = '{}{}'.format(rank.value.name, sep) if rank else ''
+        sample = stats.name
+        if extra_metadata:
+            dataset = extra_metadata[sample]['Dataset']
+            tool = extra_metadata[sample]['Tool']
 
-        file_handle.write('{}{}{}{}\t{}\n'.format(prefix, dataset_prefix, rank, 'TP', stats.tp))
-        file_handle.write('{}{}{}{}\t{}\n'.format(prefix, dataset_prefix, rank, 'FP', stats.fp))
-        file_handle.write('{}{}{}{}\t{}\n'.format(prefix, dataset_prefix, rank, 'FN', stats.fn))
-        file_handle.write('{}{}{}{}\t{}\n'.format(prefix, dataset_prefix, rank, 'Sensitivity', stats.Sensitivity()))
-        file_handle.write('{}{}{}{}\t{}\n'.format(prefix, dataset_prefix, rank, 'Precision', stats.Precision()))
-        file_handle.write('{}{}{}{}\t{}\n'.format(prefix, dataset_prefix, rank, 'F1', stats.F1()))
+        extra_metadata = None
+        file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'TP', stats.tp, '\t' + extra_metadata if extra_metadata else ""))
+        file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'FP', stats.fp, '\t' + extra_metadata if extra_metadata else ""))
+        file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'FN', stats.fn, '\t' + extra_metadata if extra_metadata else ""))
+        file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'Sensitivity', stats.Sensitivity(), '\t' + extra_metadata if extra_metadata else ""))
+        file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'Precision', stats.Precision(), '\t' + extra_metadata if extra_metadata else ""))
+        file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'F1', stats.F1(), '\t' + extra_metadata if extra_metadata else ""))
 
 
-def print_abundance_stats(stats_dict, name: str = '', dataset: str = '', sep: str = '\t', file_handle=sys.stdout):
-    prefix = '{}{}'.format(name, sep) if name else ''
-    dataset_prefix = '{}{}'.format(dataset, sep) if name else ''
-
+def print_abundance_stats(stats_dict, tool: str = '', dataset: str = '', sep: str = '\t', file_handle=sys.stdout, extra_metadata=None):
     for rank, stats in stats_dict.items():
-        rank = '{}{}'.format(rank.value.name, sep) if rank else ''
 
-        file_handle.write('{}{}{}{}\t{}\n'.format(prefix, dataset_prefix, rank, 'PearsonCorrelationIntersect',
-                                                  stats.pearson_correlation_intersection))
-        file_handle.write('{}{}{}{}\t{}\n'.format(prefix, dataset_prefix, rank, 'PearsonCorrelationUnion',
-                                                  stats.pearson_correlation_union))
-        file_handle.write('{}{}{}{}\t{}\n'.format(prefix, dataset_prefix, rank, 'BrayCurtisIntersect',
-                                                  stats.bray_curtis_intersection))
-        file_handle.write('{}{}{}{}\t{}\n'.format(prefix, dataset_prefix, rank, 'BrayCurtisUnion',
-                                                  stats.bray_curtis_union))
-        file_handle.write('{}{}{}{}\t{}\n'.format(prefix, dataset_prefix, rank, 'L2Intersect',
-                                                  stats.l2_intersection))
-        file_handle.write('{}{}{}{}\t{}\n'.format(prefix, dataset_prefix, rank, 'L2Union',
-                                                  stats.l2_union))
+        sample = stats.name
+        print(extra_metadata)
+        if extra_metadata:
+            dataset = extra_metadata[sample]['Dataset']
+            tool = extra_metadata[sample]['Tool']
+
+        extra_metadata = None
+
+        file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'PearsonCorrelationIntersect',
+                                                  stats.pearson_correlation_intersection, '\t' + extra_metadata if extra_metadata else ""))
+        file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'PearsonCorrelationUnion',
+                                                              stats.pearson_correlation_union, '\t' + extra_metadata if extra_metadata else ""))
+        file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'BrayCurtisIntersect',
+                                                              stats.bray_curtis_intersection, '\t' + extra_metadata if extra_metadata else ""))
+        file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'BrayCurtisUnion',
+                                                              stats.bray_curtis_union, '\t' + extra_metadata if extra_metadata else ""))
+        file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'L2Intersect',
+                                                              stats.l2_intersection, '\t' + extra_metadata if extra_metadata else ""))
+        file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'L2Union',
+                                                              stats.l2_union, '\t' + extra_metadata if extra_metadata else ""))
 
 
-def write_statistics(output: str, all_statistics_dict, all_abundance_statistics_dict):
+def write_statistics(output: str, all_statistics_dict, all_abundance_statistics_dict, header=True, extra_metadata=None):
     with open(output, 'w') as out:
-        out.write('{}\t{}\t{}\t{}\t{}\n'.format(
-            "tool", "sample", "rank", "metric", "value"
-        ))
+        if header:
+            out.write('{}\t{}\t{}\t{}\t{}\t{}\n'.format(
+                "sample", "dataset", "tool", "rank", "metric", "value"
+            ))
         for tool, statistics_dict_list in all_statistics_dict.items():
             abundance_dict_list = all_abundance_statistics_dict[tool]
             dataset_num = 0
             for statistics_dict, abundance_dict in zip(statistics_dict_list, abundance_dict_list):
                 dataset = str(dataset_num)
-                print_binary_stats(statistics_dict, tool, dataset, file_handle=out)
-                print_abundance_stats(abundance_dict, tool, dataset, file_handle=out)
+                print_binary_stats(statistics_dict, tool, dataset, file_handle=out, extra_metadata=extra_metadata)
+                print_abundance_stats(abundance_dict, tool, dataset, file_handle=out, extra_metadata=extra_metadata)
+                # print_binary_stats(statistics_dict, tool, dataset, extra_metadata=extra_metadata)
+                # print_abundance_stats(abundance_dict, tool, dataset, extra_metadata=extra_metadata)
                 dataset_num += 1
                 

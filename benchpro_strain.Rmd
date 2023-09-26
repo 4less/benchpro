@@ -51,7 +51,11 @@ get_tree_dict <- function(names, paths, midpoint.root=TRUE) {
     name <- names[rid]
     nwk.path <- paths[rid]
     
-    print(nwk.path)
+    # print(nwk.path)
+    if (!file.exists(nwk.path)) {
+      tree_dict[[name]] <- NULL
+      next
+    }
     tree <- ape::read.tree(nwk.path)
     if (midpoint.root) {
       tree <- midpoint.root(tree)
@@ -155,6 +159,18 @@ pairwise_mantel <- function(tree_dict) {
   return(df)
 }
 
+intersect_trees <- function(tree1, tree2) {
+  shared_tips <- intersect(tree1$tip.label, tree2$tip.label)
+  result <- list()
+  result$tree1 <- ape::keep.tip(tree1, shared_tips)
+  result$tree2 <- ape::keep.tip(tree2, shared_tips)
+  return(result)
+}
+
+dist_topo_shared <- function(tree1, tree2) {
+  tree.intersection <- intersect_trees(tree1, tree2)
+  return(ape::dist.topo(ape::unroot(tree.intersection$tree1), ape::unroot(tree.intersection$tree2)))
+}
 
 tokey <- function(key1, key2) {
   return(paste(min(key1, key2), max(key1, key2), collapse='_'))
@@ -197,17 +213,26 @@ get_name_to_group <- function(name, map, meta.dict, group_var) {
 }
 
 monophyly <- function(tree, tree.group) {
-  tree <- tree
+  tree <<- tree
   monophyly.list <- c()
   groups <- unique(tree.group)
+  working_groups <- c()
   for (group in groups) {
+    # print(group)
     group.tips <- intersect(names(tree.group[tree.group %in% group]), tree$tip.label)
+    if (length(group.tips) == 0) {
+      next
+    }
+    
+    working_groups <- c(working_groups, group)
+    # print(paste("Group Tips", group.tips))
     lca <- getMRCA(tree, group.tips[group.tips %in% tree$tip.label])
+    # print(paste("Extract", lca))
     clade.tree <- extract.clade(tree, lca, collapse.singles = FALSE)
     monophyly.item <- length(group.tips)/length(clade.tree$tip.label)
     monophyly.list <- c(monophyly.list, monophyly.item)
   }
-  return(setNames(as.list(monophyly.list), groups))
+  return(setNames(as.list(monophyly.list), working_groups))
 }
 
 monophylies <- function(trees, map, meta.dict, group_name) {
@@ -217,6 +242,9 @@ monophylies <- function(trees, map, meta.dict, group_name) {
   
   for (name in names(trees)) {
     tree <- trees[[name]]
+    if (is.null(tree)) next
+    
+    # print(name)
     tree.group <- get_name_to_group(name, map, meta.dict, group_name)
     monophyly.list <- monophyly(tree, tree.group)
     for (group in names(monophyly.list)) {
@@ -270,8 +298,8 @@ MAP_TREE_COL <- "Tree"
 MAP_META_COL <- "Meta"
 META_GROUP_COL <- "genome"
 
-map.file <- "/usr/users/QIB_fr017/fritsche/Projects/benchpro/data/test_map.tsv"
-# map.file <- "/usr/users/QIB_fr017/fritsche/Projects/benchpro/data/SPECIES46/map_subset.tsv"
+# map.file <- "/usr/users/QIB_fr017/fritsche/Projects/benchpro/data/test_map.tsv"
+map.file <- "/usr/users/QIB_fr017/fritsche/Projects/benchpro/data/SPECIES46/map.csv"
 map <- load_map(map.file)
 #map <- map[map$TreeTool == "iqtree",]
 
@@ -300,7 +328,12 @@ testt <- tree.dict[[1]]
 
 
 if (FALSE) {
-for (treepath in map$Tree) {
+  for (treepath in map[map$Tool == "gold_std", "SpeciesTree"]) {
+    print(treepath)
+  }
+for (treepath in map[map$Tool == "gold_std", "SpeciesTree"]) {
+  if (!file.exists(treepath)) next
+  print(treepath)
   tree <- ape::read.tree(treepath)
   tiplabs <- c()
   genomes <- c()
@@ -343,11 +376,53 @@ if (length(tree_dict_shared_tips) > 0){
 
 monophyly.df <- monophylies(tree.dict, map, meta.dict, "genome")
 monophyly.df$Tool <- map[monophyly.df$Name, "Tool"]
-mono.plot.all <- ggplot(monophyly.df, aes(x=Tool, y=Value, fill=Tool)) + 
+monophyly.df$Species <- map[monophyly.df$Name, "Species"]
+monophyly.df$TreeTool <- map[monophyly.df$Name, "TreeTool"]
+monophyly.df$Value <- as.numeric(monophyly.df$Value)
+
+mono.plot.all <- monophyly.df %>% filter(Tool == "StrainPhlan4") %>% ggplot(aes(x=Tool, y=Value, fill=TreeTool, group=TreeTool)) + 
   geom_boxplot() + theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
   facet_wrap(~Species)#, ncol=1)
 print(mono.plot.all)
 mono.plot.all
+
+
+monophyly.df %>% filter(Tool != "gold_std") %>% ggplot(aes(x=reorder(Species, Value, FUN=median, decreasing=TRUE), y=Value, fill=Tool)) + 
+  geom_boxplot()
+
+species_order <- monophyly.df %>% filter(Tool == "StrainPhlan4") %>% group_by(Species) %>% summarise(median=median(Value), quantile=quantile(Value)[2], min=quantile(Value)[1]) %>% arrange(median, quantile, min)
+
+
+monophyly.df %>% filter(Tool != "gold_std") %>% mutate(Species = ordered(Species, levels=rev(species_order$Species))) %>% ggplot(aes(x=Species, y=Value, fill=Tool)) + 
+  geom_boxplot()
+```
+
+
+```{r}
+#reorder(Species, Value, FUN=median, decreasing=TRUE)
+monoplot <- monophyly.df %>% mutate(Species = ordered(Species, levels=rev(species_order$Species))) %>% 
+  ggplot(aes(x=Species, y=Value, fill=TreeTool)) + 
+  geom_boxplot() + coord_flip()
+monoplot
+
+
+pairwise_plot_iqrax <- monophyly.df %>% 
+  filter(Tool == "StrainPhlan4") %>% 
+  pivot_wider(id_cols = Group, names_from="TreeTool", values_from="Value") %>%
+  left_join(monophyly.df %>% select(Species, Group), by='Group') %>% filter(iqtree != 1 & RaxML != 1) %>%
+  ggplot(aes(x=iqtree, y=RaxML, color=Species)) + geom_point(position='jitter') + theme(aspect.ratio=1)
+pairwise_plot_iqrax
+
+pairwise_plot_iqvcf <- monophyly.df %>% 
+  filter(Tool == "StrainPhlan4") %>% 
+  pivot_wider(id_cols = Group, names_from="TreeTool", values_from="Value") %>%
+  left_join(monophyly.df %>% select(Species, Group), by='Group') %>% filter(iqtree != 1 & RaxML != 1) %>%
+  ggplot(aes(x=iqtree, y=VeryFastTree, color=Species)) + geom_point(position='jitter') + theme(aspect.ratio=1) + xlim(c(0,1)) + ylim(c(0,1))
+pairwise_plot_iqvcf
+
+
+#  geom_boxplot()
+#  geom_point(stat = 'summary', fun.y="mean") + 
 
 # for (species in unique(map$Species)) {
 #   print(species)

@@ -1,15 +1,89 @@
 #!/usr/bin/env python
-from src.options import get_options
+from src.options import get_options, parse_columns
 from src.profile import ProfileFactory
 from src.statistics import get_rank_statistics, write_statistics
 from src.per_sample_output import WorkbookLogSample
+from src.external_tools import *
 
 from loguru import logger
 import os
 
-def main_script():
-    opts = get_options()
+def from_metafile(opts):
 
+    meta = opts.meta
+
+    profile_factory = ProfileFactory()
+    stats_dict = dict()
+    abundance_stats_dict = dict()
+
+    workbook_logger = WorkbookLogSample(opts.detailed_output) if opts.detailed_output else None
+
+    skip = True
+    header = True
+
+    profile_names = []
+
+    for row in meta.workbook.active:
+        if skip:
+            skip = False
+            continue
+
+        rd = meta.row_to_dict(row)
+
+        gold_columns = parse_columns(rd['GoldStdColumns'])
+        profile_columns = parse_columns(rd['ProfileColumns'])
+        gold_std_file = rd['GoldStd']
+        prediction_file = rd['Profile']
+        tool = rd['Tool']
+        sample_id = rd['ID']
+
+        if tool not in stats_dict:
+            stats_dict[tool] = []
+            abundance_stats_dict[tool] = []
+
+        logger.info(f"Read Gold Standard File: {gold_std_file}")
+        gold_std = profile_factory(
+            gold_std_file,
+            sample_id + "_gold",
+            name_column=gold_columns['name'],
+            lineage_column=gold_columns['lineage'],
+            abundance_column=gold_columns['abundance'],
+            rank_column=gold_columns['rank'])
+
+
+        logger.info(f"{len(gold_std.Rows())} in Gold Std profile")
+        logger.info(f"Read Prediction File: {prediction_file}")
+        prediction = profile_factory(
+            prediction_file,
+            sample_id,
+            name_column=profile_columns['name'],
+            lineage_column=profile_columns['lineage'],
+            abundance_column=profile_columns['abundance'],
+            rank_column=profile_columns['rank'])
+
+        profile_names.append(sample_id)
+
+        logger.info(f"{len(prediction.Rows())} in prediction profile")
+
+        logger.info(f"Compute statistics for ranks {opts.ranks}")
+        rank_stats, abundance_stats = get_rank_statistics(gold_std, prediction, ranks=opts.ranks,
+                                                          workbook_logger=workbook_logger)
+
+        logger.info(f"{len(rank_stats)} in rank_stats profile")
+
+        stats_dict[tool].append(rank_stats)
+        abundance_stats_dict[tool].append(abundance_stats)
+
+    if workbook_logger:
+        workbook_logger.save()
+        workbook_logger.print_xsv()
+        print("Saved workbook to: {}".format(workbook_logger.output_path))
+
+    md = opts.meta.to_meta_dict()
+
+    write_statistics(opts.output, stats_dict, abundance_stats_dict, header=True, extra_metadata=md)
+
+def from_arguments(opts):
     profile_factory = ProfileFactory()
 
     stats_dict = dict()
@@ -58,6 +132,9 @@ def main_script():
             logger.info(f"Compute statistics for ranks {opts.ranks}")
             rank_stats, abundance_stats = get_rank_statistics(gold_std, prediction, ranks=opts.ranks,
                                                               workbook_logger=workbook_logger)
+
+            logger.info(f"{len(rank_stats)} in rank_stats profile")
+
             stats_dict[tool].append(rank_stats)
             abundance_stats_dict[tool].append(abundance_stats)
 
@@ -67,6 +144,16 @@ def main_script():
         print("Saved workbook to: {}".format(workbook_logger.output_path))
 
     write_statistics(opts.output, stats_dict, abundance_stats_dict)
+
+def main_script():
+    opts = get_options()
+
+    if opts.meta:
+        from_metafile(opts)
+    else:
+        from_arguments(opts)
+
+    execute(run_rbenchpro(opts.output, f"{opts.output}.html"))
 
 
 if __name__ == '__main__':
