@@ -68,7 +68,7 @@ if (length(unique(ds$dataset)) == 1) {
   
 ds.all$sample <- factor(ds.all$sample)
 ds.all$rank <- factor(ds.all$rank, levels=c("Domain", "Phylum", "Class", "Order", "Family", "Genus", "Species", "Strain"), ordered = TRUE)
-ds.all$metric <- factor(ds.all$metric, levels=c("F1", "Sensitivity", "Precision", "TP", "TN", "FP", "FN", "PearsonCorrelationIntersect", "PearsonCorrelationUnion", "BrayCurtisIntersect", "BrayCurtisUnion", "L2Intersect", "L2Union"), ordered = TRUE)
+ds.all$metric <- factor(ds.all$metric, levels=c("F1", "Sensitivity", "Precision", "TP", "TN", "FP", "FN", "PearsonCorrelationIntersect", "PearsonCorrelationUnion", "BrayCurtisIntersect", "BrayCurtisUnion", "L2Intersect", "L2Union", "ShannonDiversity", "ShannonDiversityGold", "ShannonDiversityDiff"), ordered = TRUE)
 
 # if ("dataset" %in% unique(ds.all$dataset)) {
 #   ds.all$dataset <- factor(ds.all$dataset, levels=c("all", unique(ds$dataset)), ordered = TRUE)
@@ -85,7 +85,7 @@ summary(ds.all)
 # Data analysis {.tabset}
 ## Rank-wise analysis { .tabset }
 
-```{r, echo=FALSE, results="asis", eval = FALSE}
+```{r, echo=FALSE, results="asis", eval = TRUE}
 
 for (target_rank in rev(ranks)) {
   contained <- target_rank %in% unique(ds.all$rank)
@@ -114,7 +114,7 @@ for (target_rank in rev(ranks)) {
 
 ## Rank-wise abundance analysis { .tabset }
 
-```{r, echo=FALSE, results="asis", eval = FALSE}
+```{r, echo=FALSE, results="asis", eval = TRUE}
 for (target_rank in rev(ranks)) {
   contained <- target_rank %in% unique(ds.all$rank)
   if (!contained) next
@@ -143,7 +143,7 @@ for (target_rank in rev(ranks)) {
 
 ## Tool-wise analysis { .tabset }
 
-```{r, echo=FALSE, results="asis", eval = FALSE}
+```{r, echo=FALSE, results="asis", eval = TRUE}
 for (target_tool in unique(ds.all$tool)) {
   
   asis_output(paste("### ", target_tool, " level  \n", sep=""))
@@ -169,7 +169,7 @@ for (target_tool in unique(ds.all$tool)) {
 
 ## Sample-wise analysis { .tabset }
 
-```{r, echo=FALSE, results="asis", eval = FALSE}
+```{r, echo=FALSE, results="asis", eval = TRUE}
 # dataset_detailed_path <- "/media/fritsche/Extreme_SSD/results/CAMI/HumanToy/Benchmark/tmp/detailed.xlsx"
 # ds.detail <- read_xlsx(dataset_detailed_path)
 # ds.detail
@@ -261,70 +261,32 @@ cat(children, sep='\n')
 ```{r, echo=FALSE, results="asis"}
 
 children <- c()
-for (ds in unique(ds.detail$Dataset)) {
-  children <- c(children, knitr::knit_child( text=c(paste('### ', ds, sep='')), quiet=TRUE))
-  dssub <- ds.detail %>% filter(Dataset == ds & Rank == "Species")
+for (dset in unique(ds.detail$Dataset)) {
+  children <- c(children, knitr::knit_child( text=c(paste('### ', dset, sep='')), quiet=TRUE))
+  dssub <- ds.detail %>% filter(Dataset == dset & Rank == "Species")
   children <- c(children, knitr::knit_child(input="/usr/users/QIB_fr017/fritsche/Projects/benchpro/knit_abundance_child.Rmd", envir=environment(), quiet = TRUE))
 }
 cat(children, sep='\n')
-
-# ab <- ds.detail %>% mutate(Abundance=if_else(GOLD == 0, PRED, GOLD)) %>%
-#   ggplot(aes(x=Tool, y=Abundance, color=Type)) +
-#   geom_jitter(alpha=0.8) + 
-#   coord_cartesian(ylim=c(0, 0.005)) + 
-#   scale_y_continuous(trans = scales::pseudo_log_trans(sigma = 0.000001))
-# print(ab)
-
-
-# children <- c()
-# #### 1 A {.tabset .tabset-fade .tabset-pills}
-# for (dataset in unique(ds.detail$Dataset)) {
-#   children <- c(children, knitr::knit_child( text=c(paste('### ', dataset, ' { .tabset }', sep='')), quiet=TRUE))
-#   dataset_df <- ds.detail %>% filter(Dataset == dataset)
-#   
-#   
-#   
-#   
-#   for (tool in unique(dataset_df$Tool)) {
-#     tool_df <- dataset_df[dataset_df$Tool == tool,]
-#     dffilter <- dataset
-#     tlfilter <- tool
-#     
-#     children <- c(children, knitr::knit_child( text=c(paste('#### ', tool, sep='')), quiet=TRUE))
-#     children <- c(children, knitr::knit_child( text=c(paste('##### Tables { .tabset }', sep='')), quiet=TRUE))
-#     
-#     # child <- knitr::knit_child( text=c('###### Rank { .tabset }'), quiet=TRUE)
-#     # children <- c(children, child)
-#     tool_summary_df <- ds %>% filter(dataset == dataset)
-#     for (r in rev(unique(ds$rank))) {
-#         children <- c(children, knitr::knit_child( text=c(paste('###### ', r, sep='')), quiet=TRUE))
-#         summary_df <- ds %>%
-#           filter(dataset == dffilter & tool == tlfilter & rank == r) %>%
-#           pivot_wider(names_from=metric, values_from=value) %>%
-#           select (-c(rank)) %>% as.data.frame()
-# 
-#         children <- c(children, knitr::kable(summary_df))
-#     }
-# 
-#     #
-#     # child <- knitr::knit_child( text=c('###### Plots per Sample { .tabset .tabset-dropdown }'), quiet=TRUE)
-#     # children <- c(children, child)
-# 
-#     children <- c(children, knitr::knit_child( text=c(paste('##### Plots: {.tabset }', sep='')), quiet=TRUE))
-# 
-#     for (sample in unique(tool_df$Sample)) {
-#       children <- c(children, knitr::knit_child( text=c(paste('###### ', sample, sep='')), quiet=TRUE))
-# 
-#       textvar <- paste(dataset, tool, sample)
-#       subdf <- tool_df %>% filter(Sample == sample)
-# 
-#       child <- knitr::knit_child(input="/usr/users/QIB_fr017/fritsche/Projects/benchpro/knit_sample.Rmd", envir=environment(), quiet = TRUE)
-#       children <- c(children, child)
-#     }
-#     child <- knitr::knit_child( text=c('###### {-}'), quiet=TRUE)
-#   }
-# }
-# cat(children, sep='\n')
 ```
 
 
+
+## Alpha diversity detection threshold { .tabset }
+
+```{r, echo=FALSE, results="asis"}
+
+target_stats <- c("ShannonDiversity", "ShannonDiversityGold", "ShannonDiversityDiff",
+                  "ShannonDiversityTP", "ShannonDiversityGoldTP", "ShannonDiversityDiffTP",
+                  "RichnessTP", "RichnessGoldTP", "RichnessTPDiff")
+
+#ds %>% filter(rank == r & metric %in% target_stats)
+
+children <- c()
+for (r in unique(ds$rank)) {
+  children <- c(children, knitr::knit_child( text=c(paste('### ', r, sep='')), quiet=TRUE))
+  dssub <- ds %>% filter(rank == r & metric %in% target_stats)
+  dssub$metric <- ordered(dssub$metric, levels=target_stats)
+  children <- c(children, knitr::knit_child(input="/usr/users/QIB_fr017/fritsche/Projects/benchpro/knit_alpha_diversity_child.Rmd", envir=environment(), quiet = TRUE))
+}
+cat(children, sep='\n')
+```

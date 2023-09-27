@@ -1,5 +1,5 @@
 import argparse
-from src.profile import ProfileFactory, Rank, rank_map, default_ranks
+from src.taxon_profile import ProfileFactory, Rank, rank_map, default_ranks
 from src.meta import Meta, write_template_meta
 from loguru import logger
 import sys
@@ -79,6 +79,8 @@ def get_args():
                             help='Detailed output statistics file.')
         parser.add_argument('--ranks', dest='ranks', type=str, default=None,
                             help='target ranks')
+        parser.add_argument('--stats_only', action='store_true',
+                            help='Do not run Rmarkdown visualization afterwards')
 
     else:
         parser = argparse.ArgumentParser(description='Benchmark the performance of metagenomic profilers. Works also with '

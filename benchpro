@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 from src.options import get_options, parse_columns
-from src.profile import ProfileFactory
+from src.taxon_profile import ProfileFactory
 from src.statistics import get_rank_statistics, write_statistics
 from src.per_sample_output import WorkbookLogSample
 from src.external_tools import *
@@ -15,6 +15,7 @@ def from_metafile(opts):
     profile_factory = ProfileFactory()
     stats_dict = dict()
     abundance_stats_dict = dict()
+    misc_stats_dict = dict()
 
     workbook_logger = WorkbookLogSample(opts.detailed_output) if opts.detailed_output else None
 
@@ -47,6 +48,7 @@ def from_metafile(opts):
         if tool not in stats_dict:
             stats_dict[tool] = []
             abundance_stats_dict[tool] = []
+            misc_stats_dict[tool] = []
 
         logger.info(f"Read Gold Standard File: {gold_std_file}")
         gold_std = profile_factory(
@@ -73,13 +75,14 @@ def from_metafile(opts):
         logger.info(f"{len(prediction.Rows())} in prediction profile")
 
         logger.info(f"Compute statistics for ranks {opts.ranks}")
-        rank_stats, abundance_stats = get_rank_statistics(gold_std, prediction, ranks=opts.ranks,
+        rank_stats, abundance_stats, misc_stats = get_rank_statistics(gold_std, prediction, ranks=opts.ranks,
                                                           workbook_logger=workbook_logger, metadata=md)
 
         logger.info(f"{len(rank_stats)} in rank_stats profile")
 
         stats_dict[tool].append(rank_stats)
         abundance_stats_dict[tool].append(abundance_stats)
+        misc_stats_dict[tool].append(misc_stats)
 
     if workbook_logger:
         workbook_logger.save()
@@ -87,13 +90,14 @@ def from_metafile(opts):
         print("Saved workbook to: {}".format(workbook_logger.output_path))
 
 
-    write_statistics(opts.output, stats_dict, abundance_stats_dict, header=True, extra_metadata=md)
+    write_statistics(opts.output, stats_dict, abundance_stats_dict, misc_stats_dict, header=True, extra_metadata=md)
 
 def from_arguments(opts):
     profile_factory = ProfileFactory()
 
     stats_dict = dict()
     abundance_stats_dict = dict()
+    misc_stats_dict = dict()
 
     workbook_logger = WorkbookLogSample(opts.detailed_output) if opts.detailed_output else None
 
@@ -103,6 +107,7 @@ def from_arguments(opts):
         if tool not in stats_dict:
             stats_dict[tool] = []
             abundance_stats_dict[tool] = []
+            misc_stats_dict[tool] = []
 
         if len(files) != len(opts.gold_std_files):
             logger.exception(f"Number of prediction profiles ({len(files)}) is not the same as number of goldstd profiles ({len(opts.gold_std_files)})")
@@ -136,20 +141,21 @@ def from_arguments(opts):
             logger.info(f"{len(prediction.Rows())} in prediction profile")
 
             logger.info(f"Compute statistics for ranks {opts.ranks}")
-            rank_stats, abundance_stats = get_rank_statistics(gold_std, prediction, ranks=opts.ranks,
+            rank_stats, abundance_stats, misc_stats = get_rank_statistics(gold_std, prediction, ranks=opts.ranks,
                                                               workbook_logger=workbook_logger, metadata=metadata)
 
             logger.info(f"{len(rank_stats)} in rank_stats profile")
 
             stats_dict[tool].append(rank_stats)
             abundance_stats_dict[tool].append(abundance_stats)
+            misc_stats_dict[tool].append(misc_stats)
 
     if workbook_logger:
         workbook_logger.save()
         # workbook_logger.print_xsv()
         logger.info("Saved workbook to: {}".format(workbook_logger.output_path))
 
-    write_statistics(opts.output, stats_dict, abundance_stats_dict)
+    write_statistics(opts.output, stats_dict, abundance_stats_dict, misc_stats_dict)
 
 def main_script():
     opts = get_options()

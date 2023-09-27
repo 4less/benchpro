@@ -1,13 +1,12 @@
-from src.profile import Profile, default_ranks
+from src.taxon_profile import Profile, default_ranks, Rank, RankTemp
 from src.binary_statistics import BinaryStatistics
-from src.profile import RankTemp
-from src.profile import Rank
 import scipy as sc
 import sys
 import math
 from loguru import logger
 from collections import namedtuple
 from skbio.diversity import alpha
+import numpy as np
 
 
 class AbundanceStatistics:
@@ -15,6 +14,8 @@ class AbundanceStatistics:
         self.name = name
         self.pearson_correlation_intersection = 0
         self.pearson_correlation_union = 0
+        self.spearman_correlation_intersection = 0
+        self.spearman_correlation_union = 0
         self.bray_curtis_intersection = 0
         self.bray_curtis_union = 0
         self.l2_intersection = 0
@@ -102,8 +103,8 @@ def get_rank_statistics(gold_profile: Profile, prediction_profile: Profile,
 
         gold_dict = get_abundance_dict(gold_profile, rank)
         prediction_dict = get_abundance_dict(prediction_profile, rank)
-        gold_vec = gold_dict.values()
-        pred_vec = prediction_dict.values()
+        gold_vec = list(gold_dict.values())
+        pred_vec = list(prediction_dict.values())
         gold_vec_shared = [gold_dict[key] for key in shared]
         pred_vec_shared = [prediction_dict[key] for key in shared]
 
@@ -134,6 +135,13 @@ def get_rank_statistics(gold_profile: Profile, prediction_profile: Profile,
         logger.info("Pearson Correlation Shared {} Union {}".format(abundance.pearson_correlation_intersection, abundance.pearson_correlation_union))
 
         ##########################################################################################
+        # Spearman correlation
+        abundance.spearman_correlation_intersection = sc.stats.spearmanr(gold_vec_shared, pred_vec_shared).statistic if len(gold_vec_shared) > 1 else 0
+        abundance.spearman_correlation_union = sc.stats.spearmanr(gold_vec_union, pred_vec_union).statistic if len(gold_vec_shared) > 1 else 0
+
+        logger.info("Spearman Correlation Shared {} Union {}".format(abundance.spearman_correlation_intersection, abundance.spearman_correlation_union))
+
+        ##########################################################################################
         # Bray-Curtis
         abundance.bray_curtis_intersection = bray_curtis(gold_vec_shared, pred_vec_shared)
         abundance.bray_curtis_union = bray_curtis(gold_vec_union, pred_vec_union)
@@ -156,11 +164,18 @@ def get_rank_statistics(gold_profile: Profile, prediction_profile: Profile,
 
         ##########################################################################################
         # Shannon diversity
-        misc_stats.statistics["ShannonDiversity"] = alpha.shannon(pred_vec)
-        misc_stats.statistics["ShannonDiversityGold"] = alpha.shannon(gold_vec)
+        misc_stats.statistics["ShannonDiversity"] = alpha.shannon(np.array(pred_vec))
+        misc_stats.statistics["ShannonDiversityGold"] = alpha.shannon(np.array(gold_vec))
         misc_stats.statistics["ShannonDiversityDiff"] = abs(misc_stats.statistics["ShannonDiversityGold"]- misc_stats.statistics["ShannonDiversity"])
+        misc_stats.statistics["ShannonDiversityTP"] = alpha.shannon(np.array(pred_vec_shared))
+        misc_stats.statistics["ShannonDiversityGoldTP"] = alpha.shannon(np.array(gold_vec_shared))
+        misc_stats.statistics["ShannonDiversityDiffTP"] = abs(misc_stats.statistics["ShannonDiversityGoldTP"]- misc_stats.statistics["ShannonDiversityTP"])
+        misc_stats.statistics["RichnessTP"] = len(pred_vec_shared)
+        misc_stats.statistics["RichnessGoldTP"] = len(gold_vec_shared)
+        misc_stats.statistics["RichnessTPDiff"] = abs(len(gold_vec) - len(pred_vec_shared))
 
         logger.info("Shannon diversity Prediction {} vs Gold {}".format(misc_stats.statistics["ShannonDiversity"], misc_stats.statistics["ShannonDiversityGold"]))
+        logger.info("Shannon diversity Prediction {} vs Gold {}".format(misc_stats.statistics["ShannonDiversityTP"], misc_stats.statistics["ShannonDiversityGoldTP"]))
         ##########################################################################################
 
 
@@ -175,7 +190,7 @@ def get_rank_statistics(gold_profile: Profile, prediction_profile: Profile,
             logger.exception(f"{gold_profile.name}\t{prediction_profile.name}\t{rank}")
             exit(9)
 
-    return binary_statistics_rank, abundance_statistics_rank
+    return binary_statistics_rank, abundance_statistics_rank, miscellaneous_statistics_rank
 
 
 def print_binary_stats(stats_dict, tool: str = '', sample: str = '', dataset: str = '', sep: str = '\t', file_handle=sys.stdout, extra_metadata=None):
@@ -199,7 +214,6 @@ def print_abundance_stats(stats_dict, tool: str = '', dataset: str = '', sep: st
     for rank, stats in stats_dict.items():
 
         sample = stats.name
-        print(extra_metadata)
         if extra_metadata:
             dataset = extra_metadata[sample]['Dataset']
             tool = extra_metadata[sample]['Tool']
@@ -210,6 +224,10 @@ def print_abundance_stats(stats_dict, tool: str = '', dataset: str = '', sep: st
                                                   stats.pearson_correlation_intersection, '\t' + extra_metadata if extra_metadata else ""))
         file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'PearsonCorrelationUnion',
                                                               stats.pearson_correlation_union, '\t' + extra_metadata if extra_metadata else ""))
+        file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'SpearmanCorrelationIntersect',
+                                                              stats.spearman_correlation_intersection, '\t' + extra_metadata if extra_metadata else ""))
+        file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'SpearmanCorrelationUnion',
+                                                              stats.spearman_correlation_union, '\t' + extra_metadata if extra_metadata else ""))
         file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'BrayCurtisIntersect',
                                                               stats.bray_curtis_intersection, '\t' + extra_metadata if extra_metadata else ""))
         file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'BrayCurtisUnion',
@@ -220,7 +238,23 @@ def print_abundance_stats(stats_dict, tool: str = '', dataset: str = '', sep: st
                                                               stats.l2_union, '\t' + extra_metadata if extra_metadata else ""))
 
 
-def write_statistics(output: str, all_statistics_dict, all_abundance_statistics_dict, header=True, extra_metadata=None):
+def print_misc_stats(stats_dict, tool: str = '', dataset: str = '', sep: str = '\t', file_handle=sys.stdout, extra_metadata=None):
+    for rank, stats in stats_dict.items():
+
+        sample = stats.name
+        if extra_metadata:
+            dataset = extra_metadata[sample]['Dataset']
+            tool = extra_metadata[sample]['Tool']
+
+        extra_metadata = None
+
+        for metric, value in stats.statistics.items():
+            file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, metric,
+                                                                  value, '\t' + extra_metadata if extra_metadata else ""))
+
+
+
+def write_statistics(output: str, all_statistics_dict, all_abundance_statistics_dict, all_misc_statistics_dict, header=True, extra_metadata=None):
     with open(output, 'w') as out:
         if header:
             out.write('{}\t{}\t{}\t{}\t{}\t{}\n'.format(
@@ -228,11 +262,13 @@ def write_statistics(output: str, all_statistics_dict, all_abundance_statistics_
             ))
         for tool, statistics_dict_list in all_statistics_dict.items():
             abundance_dict_list = all_abundance_statistics_dict[tool]
+            misc_dict_list = all_misc_statistics_dict[tool]
             dataset_num = 0
-            for statistics_dict, abundance_dict in zip(statistics_dict_list, abundance_dict_list):
+            for statistics_dict, abundance_dict, misc_dict in zip(statistics_dict_list, abundance_dict_list, misc_dict_list):
                 dataset = str(dataset_num)
                 print_binary_stats(statistics_dict, tool, dataset, file_handle=out, extra_metadata=extra_metadata)
                 print_abundance_stats(abundance_dict, tool, dataset, file_handle=out, extra_metadata=extra_metadata)
+                print_misc_stats(misc_dict, tool, dataset, file_handle=out, extra_metadata=extra_metadata)
                 # print_binary_stats(statistics_dict, tool, dataset, extra_metadata=extra_metadata)
                 # print_abundance_stats(abundance_dict, tool, dataset, extra_metadata=extra_metadata)
                 dataset_num += 1

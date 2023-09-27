@@ -1,0 +1,19 @@
+---
+title: "knit_alpha_diversity_child"
+author: "Joachim Fritscher"
+date: "2023-09-27"
+output: html_document
+---
+
+```{r, echo=FALSE, results="asis", fig.width=10,fig.height=6}
+
+alpha.plot <- dssub %>%
+  ggplot(aes(x=tool, y=value, fill=tool)) + 
+  geom_violin() +
+  geom_boxplot(width=0.1) + 
+  facet_wrap(~metric, scales="free_y") +
+  theme(axis.text.x=element_text(angle=45,hjust=1), plot.margin = margin(l = 30, r=10, t=10))
+
+print(alpha.plot)
+
+```
