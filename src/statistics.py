@@ -7,6 +7,8 @@ import sys
 import math
 from loguru import logger
 from collections import namedtuple
+from skbio.diversity import alpha
+
 
 class AbundanceStatistics:
     def __init__(self, name):
@@ -17,7 +19,13 @@ class AbundanceStatistics:
         self.bray_curtis_union = 0
         self.l2_intersection = 0
         self.l2_union = 0
+        self.l2_log_intersection = 0
+        self.l2_log_union = 0
 
+class MiscStatistics:
+    def __init__(self, name: str):
+        self.name = name
+        self.statistics = dict()
 
 def get_abundance_dict(profile, rank):
     abundance_dict = dict()
@@ -51,10 +59,12 @@ def euclidian(a,b):
 
 def get_rank_statistics(gold_profile: Profile, prediction_profile: Profile,
                         ranks=default_ranks, workbook_logger=None, metadata=None):
+    MiscStats = namedtuple('MiscStats', ['name', 'metrics'])
 
     logger.info(f"Get rank statistics for {gold_profile.name} and {prediction_profile.name}")
-    rank_dict = dict()
-    abundance_stats = dict()
+    binary_statistics_rank = dict()
+    abundance_statistics_rank = dict()
+    miscellaneous_statistics_rank = dict()
 
 
     logger.info(f"Process ranks: {ranks}")
@@ -63,7 +73,7 @@ def get_rank_statistics(gold_profile: Profile, prediction_profile: Profile,
 
         stats = BinaryStatistics(prediction_profile.name)
         abundance = AbundanceStatistics(prediction_profile.name)
-
+        misc_stats = MiscStatistics(prediction_profile.name)
 
         prediction_set = set(row.GetLineage().Get(rank) for row in prediction_profile.Rows(rank))
         gold_set = set(row.GetLineage().Get(rank) for row in gold_profile.Rows(rank))
@@ -92,14 +102,16 @@ def get_rank_statistics(gold_profile: Profile, prediction_profile: Profile,
 
         gold_dict = get_abundance_dict(gold_profile, rank)
         prediction_dict = get_abundance_dict(prediction_profile, rank)
-        gold_vec = [gold_dict[key] for key in shared]
-        pred_vec = [prediction_dict[key] for key in shared]
+        gold_vec = gold_dict.values()
+        pred_vec = prediction_dict.values()
+        gold_vec_shared = [gold_dict[key] for key in shared]
+        pred_vec_shared = [prediction_dict[key] for key in shared]
 
-        logger.info("Shared taxa {}".format(len(gold_vec)))
-        logger.info("Shared taxa: GoldStd Sum {}, Prediction Sum {}".format(sum(gold_vec), sum(pred_vec)))
+        logger.info("Shared taxa {}".format(len(gold_vec_shared)))
+        logger.info("Shared taxa: GoldStd Sum {}, Prediction Sum {}".format(sum(gold_vec_shared), sum(pred_vec_shared)))
 
-        gold_vec_union = gold_vec + [value for key, value in gold_dict.items() if key not in prediction_dict]
-        pred_vec_union = pred_vec + [0.0 for key in gold_dict if key not in prediction_dict]
+        gold_vec_union = gold_vec_shared + [value for key, value in gold_dict.items() if key not in prediction_dict]
+        pred_vec_union = pred_vec_shared + [0.0 for key in gold_dict if key not in prediction_dict]
         pred_vec_union += [value for key, value in prediction_dict.items() if key not in gold_dict]
         gold_vec_union += [0.0 for key in prediction_dict if key not in gold_dict]
 
@@ -116,35 +128,46 @@ def get_rank_statistics(gold_profile: Profile, prediction_profile: Profile,
 
         ##########################################################################################
         # Pearson correlation
-        abundance.pearson_correlation_intersection = sc.stats.pearsonr(gold_vec, pred_vec).statistic if len(gold_vec) > 1 else 0
-        abundance.pearson_correlation_union = sc.stats.pearsonr(gold_vec_union, pred_vec_union).statistic if len(gold_vec) > 1 else 0
+        abundance.pearson_correlation_intersection = sc.stats.pearsonr(gold_vec_shared, pred_vec_shared).statistic if len(gold_vec_shared) > 1 else 0
+        abundance.pearson_correlation_union = sc.stats.pearsonr(gold_vec_union, pred_vec_union).statistic if len(gold_vec_shared) > 1 else 0
 
         logger.info("Pearson Correlation Shared {} Union {}".format(abundance.pearson_correlation_intersection, abundance.pearson_correlation_union))
 
         ##########################################################################################
         # Bray-Curtis
-        abundance.bray_curtis_intersection = bray_curtis(gold_vec, pred_vec)
+        abundance.bray_curtis_intersection = bray_curtis(gold_vec_shared, pred_vec_shared)
         abundance.bray_curtis_union = bray_curtis(gold_vec_union, pred_vec_union)
 
         logger.info("Bray-Curtis Shared {} Union {}".format(abundance.bray_curtis_intersection, abundance.bray_curtis_union))
 
         ##########################################################################################
         # Euclidean (L2)
-        abundance.l2_intersection = euclidian(gold_vec, pred_vec)
+        abundance.l2_intersection = euclidian(gold_vec_shared, pred_vec_shared)
         abundance.l2_union = euclidian(gold_vec_union, pred_vec_union)
 
+        logger.info("L2 Shared {} Union {}".format(abundance.l2_intersection, abundance.l2_union))
 
         ##########################################################################################
         # Euclidean (L2) (Math Log10 dont forget +1)
-        abundance.l2_intersection = euclidian(gold_vec, pred_vec)
-        abundance.l2_union = euclidian(gold_vec_union, pred_vec_union)
+        abundance.l2_log_intersection = euclidian([a + 1 for a in gold_vec_shared], [a + 1 for a in pred_vec_shared])
+        abundance.l2_log_union = euclidian([a+1 for a in gold_vec_union], [a+1 for a in pred_vec_union])
 
+        logger.info("L2 Log Shared {} Union {}".format(abundance.l2_log_intersection, abundance.l2_log_union))
 
-        logger.info("L2 Shared {} Union {}".format(euclidian(gold_vec, pred_vec), euclidian(pred_vec_union, gold_vec_union)))
+        ##########################################################################################
+        # Shannon diversity
+        misc_stats.statistics["ShannonDiversity"] = alpha.shannon(pred_vec)
+        misc_stats.statistics["ShannonDiversityGold"] = alpha.shannon(gold_vec)
+        misc_stats.statistics["ShannonDiversityDiff"] = abs(misc_stats.statistics["ShannonDiversityGold"]- misc_stats.statistics["ShannonDiversity"])
+
+        logger.info("Shannon diversity Prediction {} vs Gold {}".format(misc_stats.statistics["ShannonDiversity"], misc_stats.statistics["ShannonDiversityGold"]))
         ##########################################################################################
 
-        abundance_stats[rank] = abundance
-        rank_dict[rank] = stats
+
+
+        abundance_statistics_rank[rank] = abundance
+        binary_statistics_rank[rank] = stats
+        miscellaneous_statistics_rank[rank] = misc_stats
 
         try:
             stats.Validate()
@@ -152,7 +175,7 @@ def get_rank_statistics(gold_profile: Profile, prediction_profile: Profile,
             logger.exception(f"{gold_profile.name}\t{prediction_profile.name}\t{rank}")
             exit(9)
 
-    return rank_dict, abundance_stats
+    return binary_statistics_rank, abundance_statistics_rank
 
 
 def print_binary_stats(stats_dict, tool: str = '', sample: str = '', dataset: str = '', sep: str = '\t', file_handle=sys.stdout, extra_metadata=None):

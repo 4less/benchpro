@@ -99,6 +99,8 @@ def get_args():
                             help='Provide path to write template file')
         parser.add_argument('--meta_help', action='store_true',
                             help='Get help for meta_file')
+        parser.add_argument('--stats_only', action='store_true',
+                            help='Do not run Rmarkdown visualization afterwards')
         parser.add_argument('--gold_cols', dest='gold_columns', type=str, default='0|1|2',
                             help='Give column format for  gold standard profile. name_col|lineage_col|abundance_col(|rank_col :optional) (default: 0|1|2)')
         parser.add_argument('--pred_cols', dest='prediction_columns', type=str, default='0|1|2',
@@ -122,6 +124,7 @@ def get_options():
         options.meta = Meta(args.meta_file)
         options.output = args.output
         options.detailed_output = args.detailed_output
+        options.stats_only = args.stats_only
 
         if not args.ranks:
             options.ranks = default_ranks
@@ -139,6 +142,7 @@ def get_options():
     options.meta_file = args.meta
     options.meta_help = args.meta_help
     options.meta = None
+    options.stats_only = args.stats_only
 
 
     if not options.ranks:

@@ -1,0 +1,44 @@
+---
+title: "knit_sample"
+author: "Joachim Fritscher"
+date: "2023-09-26"
+output: html_document
+---
+
+
+```{r, echo=FALSE, results="asis", fig.width=10,fig.height=11}
+
+ranks <- unique(subdf$Rank)
+ranks <- c("Species")
+for (rank in ranks) {
+  tp.abundances <- subdf %>%
+    pivot_longer(c("GOLD", "PRED"), names_to="Name", values_to="Value") %>%
+    filter(Type == "TP" & Rank == rank) %>%
+    ggplot(aes(x=reorder(Taxon,-Value), y=Value, fill=Name)) + geom_bar(stat="identity", position="dodge") +
+    xlab("Taxon") +
+    theme(axis.text.x=element_text(angle=45,hjust=1), plot.margin = margin(l = 40)) + 
+    scale_y_continuous(trans = scales::pseudo_log_trans(sigma = 0.000001)) +
+    ggtitle("True positives abundance comparison")
+  print(tp.abundances)
+  
+  print("FP/FN Analysis")
+  fp.analysis <- subdf %>%
+    pivot_longer(c("GOLD", "PRED"), names_to="Name", values_to="Value") %>%
+    filter(Rank == rank & Value > 0 & (Type == "FP" | Type == "FN")) %>%
+    ggplot(aes(x=reorder(Taxon,-Value), y=Value, fill=Type)) +
+    geom_bar(stat="identity", position="dodge") +
+    xlab("Taxon") +
+    theme(axis.text.x=element_text(angle=45,hjust=1), plot.margin = margin(l = 40)) + 
+    scale_y_continuous(trans = scales::pseudo_log_trans(sigma = 0.000001)) +
+    ggtitle("False positives and False negatives")
+  print(fp.analysis)
+}
+#cat("<h1>Heading<\h1>")
+# for (name in subdf$Name) {
+#   tree_meta <- meta.dict[[subdf[subdf$Name == name, MAP_META_COL]]]
+#   tree.plot <- ggtree(tree.dict[[name]], layout='circular') %<+% tree_meta  +
+#       geom_tippoint(aes(color=.data[[META_GROUP_COL]]), size=3) +
+#       geom_tiplab(linesize=3, size=3, offset=0.001)+ theme(legend.position="None")
+#   print(tree.plot)
+# }
+```

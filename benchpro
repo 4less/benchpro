@@ -159,7 +159,8 @@ def main_script():
     else:
         from_arguments(opts)
 
-    execute(run_rbenchpro(opts.output, opts.detailed_output, f"{opts.output}.html"))
+    if not opts.stats_only:
+        execute(run_rbenchpro(opts.output, opts.detailed_output, f"{opts.output}.html"))
 
 
 if __name__ == '__main__':

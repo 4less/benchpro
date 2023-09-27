@@ -1,0 +1,23 @@
+---
+title: "knit_table"
+author: "Joachim Fritscher"
+date: "2023-09-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, echo=FALSE, results="asis", fig.width=10,fig.height=11}
+
+summary_df <- tool_df %>% group_by(Sample) %>% 
+  summarise(across(everything(), mean),
+            .groups = 'drop')  %>%
+  as.data.frame()
+
+knitr::kable(summary_df)
+
+
+```
