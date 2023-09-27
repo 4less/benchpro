@@ -118,8 +118,6 @@ def get_options():
 
     options = Options()
 
-    print(args.meta_file)
-
     if hasattr(args, "meta_file"):
         options.meta = Meta(args.meta_file)
         options.output = args.output

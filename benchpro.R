@@ -63,6 +63,8 @@ if (!argparse:::detects_python()) {
 parser <- ArgumentParser(description='benchplot')
 parser$add_argument('--input', dest='input', type = "character",
                     help='Input csv file')
+parser$add_argument('--input_detailed', dest='input_detailed', type = "character",
+                    help='Input xlsx file with detailed output')
 parser$add_argument('--output', dest='output', type = "character",
                     help='Output html file')
 parser$add_argument('--tools', dest='tools', type ="character", default='',
@@ -76,6 +78,7 @@ pandoc_version()
 getwd()
 
 input <- args$input
+input_detailed <-  args$input_detailed
 output <- args$output
 print(paste("output: ", output))
 print(paste("input:  ", input))
@@ -83,6 +86,11 @@ if (!isAbsolutePath(input)) {
   print(input)
   input <- file.path(getwd(), sub('\\./', '', args$input))
   print(input)
+}
+if (!isAbsolutePath(input_detailed)) {
+  print(input_detailed)
+  input_detailed <- file.path(getwd(), sub('\\./', '', args$input_detailed))
+  print(input_detailed)
 }
 if (!isAbsolutePath(output)) {
   output <- file.path(getwd(), sub('./', '', output))
@@ -93,6 +101,7 @@ print(paste("output: ", output))
 
 args_list = list(
   input = input,
+  input_detailed = input_detailed,
   tools = args$tools
 )
 rmd_path <- "/usr/users/QIB_fr017/fritsche/Projects/benchpro/benchpro.Rmd"

@@ -6,7 +6,7 @@ import scipy as sc
 import sys
 import math
 from loguru import logger
-
+from collections import namedtuple
 
 class AbundanceStatistics:
     def __init__(self, name):
@@ -50,7 +50,7 @@ def euclidian(a,b):
     return math.sqrt(sum)
 
 def get_rank_statistics(gold_profile: Profile, prediction_profile: Profile,
-                        ranks=default_ranks, workbook_logger=None):
+                        ranks=default_ranks, workbook_logger=None, metadata=None):
 
     logger.info(f"Get rank statistics for {gold_profile.name} and {prediction_profile.name}")
     rank_dict = dict()
@@ -106,8 +106,12 @@ def get_rank_statistics(gold_profile: Profile, prediction_profile: Profile,
         logger.info("Union taxa {}".format(len(gold_vec_union)))
         logger.info("Union taxa abundances {}".format(gold_vec_union))
         logger.info("Union taxa: GoldStd Sum {}, Prediction Sum {}".format(sum(gold_vec_union), sum(pred_vec_union)))
+
+
         if workbook_logger:
-            workbook_logger.add_sample(gold_profile.name, gold_dict, prediction_dict)
+            dataset = metadata[prediction_profile.name]['Dataset'] if metadata else "unspecified"
+            tool = metadata[prediction_profile.name]['Tool'] if metadata else "unspecified"
+            workbook_logger.add_sample(gold_profile.name, rank.value.name, dataset, tool, gold_dict, prediction_dict)
 
 
         ##########################################################################################
@@ -128,6 +132,13 @@ def get_rank_statistics(gold_profile: Profile, prediction_profile: Profile,
         # Euclidean (L2)
         abundance.l2_intersection = euclidian(gold_vec, pred_vec)
         abundance.l2_union = euclidian(gold_vec_union, pred_vec_union)
+
+
+        ##########################################################################################
+        # Euclidean (L2) (Math Log10 dont forget +1)
+        abundance.l2_intersection = euclidian(gold_vec, pred_vec)
+        abundance.l2_union = euclidian(gold_vec_union, pred_vec_union)
+
 
         logger.info("L2 Shared {} Union {}".format(euclidian(gold_vec, pred_vec), euclidian(pred_vec_union, gold_vec_union)))
         ##########################################################################################

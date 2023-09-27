@@ -23,12 +23,19 @@ def from_metafile(opts):
 
     profile_names = []
 
+    md = opts.meta.to_meta_dict()
+
     for row in meta.workbook.active:
         if skip:
             skip = False
             continue
 
         rd = meta.row_to_dict(row)
+
+        if any(e.value == None for e in row):
+            continue
+
+        print([r.value for r in row])
 
         gold_columns = parse_columns(rd['GoldStdColumns'])
         profile_columns = parse_columns(rd['ProfileColumns'])
@@ -67,7 +74,7 @@ def from_metafile(opts):
 
         logger.info(f"Compute statistics for ranks {opts.ranks}")
         rank_stats, abundance_stats = get_rank_statistics(gold_std, prediction, ranks=opts.ranks,
-                                                          workbook_logger=workbook_logger)
+                                                          workbook_logger=workbook_logger, metadata=md)
 
         logger.info(f"{len(rank_stats)} in rank_stats profile")
 
@@ -79,7 +86,6 @@ def from_metafile(opts):
         workbook_logger.print_xsv()
         print("Saved workbook to: {}".format(workbook_logger.output_path))
 
-    md = opts.meta.to_meta_dict()
 
     write_statistics(opts.output, stats_dict, abundance_stats_dict, header=True, extra_metadata=md)
 
@@ -131,7 +137,7 @@ def from_arguments(opts):
 
             logger.info(f"Compute statistics for ranks {opts.ranks}")
             rank_stats, abundance_stats = get_rank_statistics(gold_std, prediction, ranks=opts.ranks,
-                                                              workbook_logger=workbook_logger)
+                                                              workbook_logger=workbook_logger, metadata=metadata)
 
             logger.info(f"{len(rank_stats)} in rank_stats profile")
 
@@ -140,8 +146,8 @@ def from_arguments(opts):
 
     if workbook_logger:
         workbook_logger.save()
-        workbook_logger.print_xsv()
-        print("Saved workbook to: {}".format(workbook_logger.output_path))
+        # workbook_logger.print_xsv()
+        logger.info("Saved workbook to: {}".format(workbook_logger.output_path))
 
     write_statistics(opts.output, stats_dict, abundance_stats_dict)
 
@@ -153,7 +159,7 @@ def main_script():
     else:
         from_arguments(opts)
 
-    execute(run_rbenchpro(opts.output, f"{opts.output}.html"))
+    execute(run_rbenchpro(opts.output, opts.detailed_output, f"{opts.output}.html"))
 
 
 if __name__ == '__main__':

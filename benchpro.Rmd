@@ -5,13 +5,14 @@ date: October 23, 2022
 output: 
   html_document:
   toc: true
-  toc_float:
+  toc_float: true
   toc_collapsed: true
   toc_depth: 3
   number_sections: true
   theme: lumen
 params:
   input: input
+  input_detailed: input_detailed
   tools: tools
 ---
 
@@ -23,32 +24,34 @@ library(dplyr)
 library(knitr)
 library(pandoc)
 library(stringr)
+library(readxl)
+library(plotly)
 ```
 
 
 
-```{r, echo=TRUE}
+```{r, echo=FALSE}
 # Setting up variables
-
-
 ranks <- c("Domain", "Phylum", "Class", "Order", "Family", "Genus", "Species", "Strain")
 ranks <- c("Phylum", "Class", "Order", "Family", "Genus", "Species")
-# print(paste("params: ", params))
-# tools_subset <-unlist(str_split(params$tools, ","))
 ```
 
 
 
-## Data analysis {.tabset}
+# Data analysis {.tabset}
 This RMarkdown is for creating reports as part of the benchpro profiler evaluation.
 
 ```{r, echo=FALSE}
 dataset_path <- "/usr/users/QIB_fr017/fritsche/Projects/Results/CAMI-BENCHMARKS/results/combined_with_opal/combined.tsv"
 dataset_path <- "/media/fritsche/Extreme_SSD/results/CAMI/HumanToy/Benchmark/tmp/output.tsv"
-dataset_path <- params$input
-
+dataset_detailed_path <- "/media/fritsche/Extreme_SSD/results/CAMI/HumanToy/Benchmark/tmp/detailed.xlsx"
+# if (!interactive()) {
+#   dataset_path <- params$input
+#   dataset_detailed_path <- params$input_detailed
+# }
 
 ds <- read.csv(dataset_path, header=TRUE, sep='\t', row.names=NULL)
+ds.detail <- read_xlsx(dataset_detailed_path)
 
 if (length(unique(ds$dataset)) == 1) {
   ds.all <- ds
@@ -78,8 +81,8 @@ tools_subset <- factor(tools_subset)
 summary(ds.all)
 ```
 
-## Data analysis {.tabset}
-### Rank-wise analysis { .tabset }
+# Data analysis {.tabset}
+## Rank-wise analysis { .tabset }
 
 ```{r, echo=FALSE, results="asis"}
 
@@ -87,7 +90,7 @@ for (target_rank in rev(ranks)) {
   contained <- target_rank %in% unique(ds.all$rank)
   if (!contained) next
   
-  asis_output(paste("##### ", target_rank, " level  \n", sep=""))
+  asis_output(paste("### ", target_rank, " level  \n", sep=""))
   
   
   ds.plot <- ds.all %>% 
@@ -108,14 +111,14 @@ for (target_rank in rev(ranks)) {
 ```
 
 
-### Rank-wise abundance analysis { .tabset }
+## Rank-wise abundance analysis { .tabset }
 
 ```{r, echo=FALSE, results="asis"}
 for (target_rank in rev(ranks)) {
   contained <- target_rank %in% unique(ds.all$rank)
   if (!contained) next
   
-  asis_output(paste("##### ", target_rank, " level  \n", sep=""))
+  asis_output(paste("### ", target_rank, " level  \n", sep=""))
   
   ds.plot <- ds.all %>% 
     dplyr::filter(rank == target_rank & metric %in% c("PearsonCorrelationUnion", "PearsonCorrelationIntersect", "BrayCurtisUnion", "BrayCurtisIntersect", "L2Union", "L2Intersect") & tool %in% tools_subset) %>% 
@@ -137,12 +140,12 @@ for (target_rank in rev(ranks)) {
 ```
 
 
-### Tool-wise analysis { .tabset }
+## Tool-wise analysis { .tabset }
 
 ```{r, echo=FALSE, results="asis"}
 for (target_tool in unique(ds.all$tool)) {
   
-  asis_output(paste("##### ", target_tool, " level  \n", sep=""))
+  asis_output(paste("### ", target_tool, " level  \n", sep=""))
   
   ds.plot <- ds.all %>% 
     dplyr::filter(tool == target_tool & metric %in% c("F1", "Sensitivity", "Precision")) %>%
@@ -161,3 +164,165 @@ for (target_tool in unique(ds.all$tool)) {
 
 
 ```
+
+
+## Sample-wise analysis { .tabset }
+
+```{r, echo=FALSE, results="asis"}
+# dataset_detailed_path <- "/media/fritsche/Extreme_SSD/results/CAMI/HumanToy/Benchmark/tmp/detailed.xlsx"
+# ds.detail <- read_xlsx(dataset_detailed_path)
+# ds.detail
+
+children <- c()
+#### 1 A {.tabset .tabset-fade .tabset-pills}
+for (dataset in unique(ds.detail$Dataset)) {
+  children <- c(children, knitr::knit_child( text=c(paste('### ', dataset, ' { .tabset }', sep='')), quiet=TRUE))
+  dataset_df <- ds.detail %>% filter(Dataset == dataset)
+  for (tool in unique(dataset_df$Tool)) {
+    tool_df <- dataset_df[dataset_df$Tool == tool,]
+    dffilter <- dataset
+    tlfilter <- tool
+    
+    children <- c(children, knitr::knit_child( text=c(paste('#### ', tool, sep='')), quiet=TRUE))
+    children <- c(children, knitr::knit_child( text=c(paste('##### Tables { .tabset }', sep='')), quiet=TRUE))
+    
+    # child <- knitr::knit_child( text=c('###### Rank { .tabset }'), quiet=TRUE)
+    # children <- c(children, child)
+    tool_summary_df <- ds %>% filter(dataset == dataset)
+    for (r in rev(unique(ds$rank))) {
+        children <- c(children, knitr::knit_child( text=c(paste('###### ', r, sep='')), quiet=TRUE))
+        summary_df <- ds %>%
+          filter(dataset == dffilter & tool == tlfilter & rank == r) %>%
+          pivot_wider(names_from=metric, values_from=value) %>%
+          select (-c(rank)) %>% as.data.frame()
+
+        children <- c(children, knitr::kable(summary_df))
+    }
+
+    #
+    # child <- knitr::knit_child( text=c('###### Plots per Sample { .tabset .tabset-dropdown }'), quiet=TRUE)
+    # children <- c(children, child)
+
+    children <- c(children, knitr::knit_child( text=c(paste('##### Plots: {.tabset }', sep='')), quiet=TRUE))
+
+    for (sample in unique(tool_df$Sample)) {
+      children <- c(children, knitr::knit_child( text=c(paste('###### ', sample, sep='')), quiet=TRUE))
+
+      textvar <- paste(dataset, tool, sample)
+      subdf <- tool_df %>% filter(Sample == sample)
+
+      child <- knitr::knit_child(input="/usr/users/QIB_fr017/fritsche/Projects/benchpro/knit_sample.Rmd", envir=environment(), quiet = TRUE)
+      children <- c(children, child)
+    }
+    child <- knitr::knit_child( text=c('###### {-}'), quiet=TRUE)
+  }
+}
+cat(children, sep='\n')
+
+
+# species.df %>% filter(Sample == "MetaPhlAn4 GTDB_oral_16_gold") %>%
+#   pivot_longer(c("GOLD", "PRED"), names_to="Name", values_to="Value") %>%
+#   filter(Value > 0) %>%
+#   ggplot(aes(x=reorder(Taxon,-Value), y=Value, fill=Type)) + geom_bar(stat="identity", position="dodge") +
+#   xlab("Taxon") +
+#   theme(axis.text.x=element_text(angle=45,hjust=1), plot.margin = margin(l = 40))
+#
+#
+# species.df %>% filter(Sample == "MetaPhlAn4 GTDB_oral_16_gold") %>%
+#   pivot_longer(c("GOLD", "PRED"), names_to="Name", values_to="Value") %>%
+#   filter(Value > 0 & (Type == "FP" | Type == "FN")) %>%
+#   ggplot(aes(x=reorder(Taxon,-Value), y=Value, fill=Type)) +
+#   geom_bar(stat="identity", position="dodge") +
+#   xlab("Taxon") +
+#   theme(axis.text.x=element_text(angle=45,hjust=1), plot.margin = margin(l = 40))# + coord_trans(y = "log2")
+#
+# tp.abundances <- species.df %>% filter(Sample == "MetaPhlAn4 GTDB_oral_16_gold") %>%
+#   pivot_longer(c("GOLD", "PRED"), names_to="Name", values_to="Value") %>%
+#   filter(Type == "TP" & Rank == "Species") %>%
+#   ggplot(aes(x=reorder(Taxon,-Value), y=Value, fill=Name)) + geom_bar(stat="identity", position="dodge") +
+#   xlab("Taxon") +
+#   theme(axis.text.x=element_text(angle=45,hjust=1), plot.margin = margin(l = 40))
+# ggplotly(tp.abundances)
+#
+# tp.abundances <- species.df %>% filter(Sample == "protal_oral_16_gold") %>%
+#   pivot_longer(c("GOLD", "PRED"), names_to="Name", values_to="Value") %>%
+#   filter(Type == "TP" & Rank == "Species") %>%
+#   ggplot(aes(x=reorder(Taxon,-Value), y=Value, fill=Name)) + geom_bar(stat="identity", position="dodge") +
+#   xlab("Taxon") +
+#   theme(axis.text.x=element_text(angle=45,hjust=1), plot.margin = margin(l = 40))
+# ggplotly(tp.abundances)
+```
+
+
+
+## Abundance detection threshold { .tabset }
+
+```{r, echo=FALSE, results="asis"}
+
+children <- c()
+for (ds in unique(ds.detail$Dataset)) {
+  dssub <- ds.detail %>% filter(dataset == ds)
+  child <- c(children, knitr::knit_child(input="/usr/users/QIB_fr017/fritsche/Projects/benchpro/knit_abundance_child", envir=environment(), quiet = TRUE))
+}
+cat(children, sep='\n')
+
+# ab <- ds.detail %>% mutate(Abundance=if_else(GOLD == 0, PRED, GOLD)) %>%
+#   ggplot(aes(x=Tool, y=Abundance, color=Type)) +
+#   geom_jitter(alpha=0.8) + 
+#   coord_cartesian(ylim=c(0, 0.005)) + 
+#   scale_y_continuous(trans = scales::pseudo_log_trans(sigma = 0.000001))
+# print(ab)
+
+
+# children <- c()
+# #### 1 A {.tabset .tabset-fade .tabset-pills}
+# for (dataset in unique(ds.detail$Dataset)) {
+#   children <- c(children, knitr::knit_child( text=c(paste('### ', dataset, ' { .tabset }', sep='')), quiet=TRUE))
+#   dataset_df <- ds.detail %>% filter(Dataset == dataset)
+#   
+#   
+#   
+#   
+#   for (tool in unique(dataset_df$Tool)) {
+#     tool_df <- dataset_df[dataset_df$Tool == tool,]
+#     dffilter <- dataset
+#     tlfilter <- tool
+#     
+#     children <- c(children, knitr::knit_child( text=c(paste('#### ', tool, sep='')), quiet=TRUE))
+#     children <- c(children, knitr::knit_child( text=c(paste('##### Tables { .tabset }', sep='')), quiet=TRUE))
+#     
+#     # child <- knitr::knit_child( text=c('###### Rank { .tabset }'), quiet=TRUE)
+#     # children <- c(children, child)
+#     tool_summary_df <- ds %>% filter(dataset == dataset)
+#     for (r in rev(unique(ds$rank))) {
+#         children <- c(children, knitr::knit_child( text=c(paste('###### ', r, sep='')), quiet=TRUE))
+#         summary_df <- ds %>%
+#           filter(dataset == dffilter & tool == tlfilter & rank == r) %>%
+#           pivot_wider(names_from=metric, values_from=value) %>%
+#           select (-c(rank)) %>% as.data.frame()
+# 
+#         children <- c(children, knitr::kable(summary_df))
+#     }
+# 
+#     #
+#     # child <- knitr::knit_child( text=c('###### Plots per Sample { .tabset .tabset-dropdown }'), quiet=TRUE)
+#     # children <- c(children, child)
+# 
+#     children <- c(children, knitr::knit_child( text=c(paste('##### Plots: {.tabset }', sep='')), quiet=TRUE))
+# 
+#     for (sample in unique(tool_df$Sample)) {
+#       children <- c(children, knitr::knit_child( text=c(paste('###### ', sample, sep='')), quiet=TRUE))
+# 
+#       textvar <- paste(dataset, tool, sample)
+#       subdf <- tool_df %>% filter(Sample == sample)
+# 
+#       child <- knitr::knit_child(input="/usr/users/QIB_fr017/fritsche/Projects/benchpro/knit_sample.Rmd", envir=environment(), quiet = TRUE)
+#       children <- c(children, child)
+#     }
+#     child <- knitr::knit_child( text=c('###### {-}'), quiet=TRUE)
+#   }
+# }
+# cat(children, sep='\n')
+```
+
+

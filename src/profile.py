@@ -89,7 +89,7 @@ class Profile:
 
     def Get(self, name: str) -> ProfileEntry:
         if name not in self.name_to_abundance:
-            print("{} not present".format(name))
+            logger.error("{} not present".format(name))
             return None
         return self.name_to_abundance[name]
 
@@ -117,9 +117,6 @@ class Profile:
                 self.name_to_abundance[name].AddAbundance(row.GetAbundance())
                 logger.info(f"{name}: {row.GetAbundance()}")
 
-        print("After")
-        print(len(self.name_to_abundance))
-        # input()
 
 
 
@@ -246,9 +243,11 @@ class ProfileFactory:
 
         for rank in default_ranks:
             abundance_sum = sum(row.GetAbundance() for row in profile.Rows(rank))
-            if abundance_sum > 99 and abundance_sum < 101:
+            print("Abundance sum {} -> {}".format(profile.name, abundance_sum))
+            if abundance_sum > 50:
                 for row in profile.Rows(rank):
                     row.abundance /= 100
+
 
 
         return profile
