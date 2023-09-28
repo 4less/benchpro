@@ -6,7 +6,7 @@ output: html_document
 ---
 
 
-```{r, echo=FALSE, results="asis", fig.width=10,fig.height=11}
+```{r, echo=FALSE, results="asis", fig.width=10,fig.height=6}
 
 ranks <- unique(subdf$Rank)
 ranks <- c("Species")

@@ -54,6 +54,20 @@ dataset_detailed_path <- "/media/fritsche/Extreme_SSD/results/CAMI/HumanToy/Benc
 ds <- read.csv(dataset_path, header=TRUE, sep='\t', row.names=NULL)
 ds.detail <- read_xlsx(dataset_detailed_path)
 
+protal_sd <- sd(ds %>% filter(tool == "protal_f1" & metric == "F1" & rank == "Species") %>% pull(value))
+protal_mean <- mean(ds %>% filter(tool == "protal_f1" & metric == "F1" & rank == "Species") %>% pull(value))
+protal_median <- median(ds %>% filter(tool == "protal_f1" & metric == "F1" & rank == "Species") %>% pull(value))
+print(paste("F1:", protal_mean, "+-", protal_sd))
+
+mp4gtdb_sd <- sd(ds %>% filter(tool == "MetaPhlAn4 GTDB" & metric == "F1" & rank == "Species") %>% pull(value))
+mp4gtdb_mean <- mean(ds %>% filter(tool == "MetaPhlAn4 GTDB" & metric == "F1" & rank == "Species") %>% pull(value))
+print(paste("F1:", mp4gtdb_mean, "+-", mp4gtdb_sd))
+
+mp4_sd <- sd(ds %>% filter(tool == "MetaPhlAn4" & metric == "F1" & rank == "Species") %>% pull(value))
+mp4_mean <- mean(ds %>% filter(tool == "MetaPhlAn4" & metric == "F1" & rank == "Species") %>% pull(value))
+print(paste("F1:", mp4_mean, "+-", mp4_sd))
+
+
 if (length(unique(ds$dataset)) == 1) {
   ds.all <- ds
 } else {
