@@ -65,9 +65,11 @@ parser$add_argument('--input', dest='input', type = "character",
                     help='Input csv file')
 parser$add_argument('--input_detailed', dest='input_detailed', type = "character",
                     help='Input xlsx file with detailed output')
+parser$add_argument('--meta', dest='meta', type = "character",
+                    help='Meta file allows for further analysis, e.g. if a trees are given for the utilized taxonomies.')
 parser$add_argument('--output', dest='output', type = "character",
                     help='Output html file')
-parser$add_argument('--tools', dest='tools', type ="character", default='',
+parser$add_argument('--tools', dest='tools', type ="character", default=NULL,
                     help='Only for listed tools (comma separated)')
 parser$print_help()
   
@@ -80,13 +82,23 @@ getwd()
 input <- args$input
 input_detailed <-  args$input_detailed
 output <- args$output
+
 print(paste("output: ", output))
 print(paste("input:  ", input))
+
+
 if (!isAbsolutePath(input)) {
   print(input)
   input <- file.path(getwd(), sub('\\./', '', args$input))
   print(input)
 }
+
+if (!isAbsolutePath(args$meta)) {
+  print(args$meta)
+  args$meta <- file.path(getwd(), sub('\\./', '', args$meta))
+  print(args$meta)
+}
+
 if (!isAbsolutePath(input_detailed)) {
   print(input_detailed)
   input_detailed <- file.path(getwd(), sub('\\./', '', args$input_detailed))
@@ -102,6 +114,7 @@ print(paste("output: ", output))
 args_list = list(
   input = input,
   input_detailed = input_detailed,
+  meta = args$meta,
   tools = args$tools
 )
 rmd_path <- "/usr/users/QIB_fr017/fritsche/Projects/benchpro/benchpro.Rmd"
@@ -112,8 +125,17 @@ sourceDir <- dirname(ez.csf())
 print(sourceDir)
 print(paste("Sourcedir: " , sourceDir))
 path_to_rmd <- file.path(sourceDir, "benchpro.Rmd")
+path_to_rmd_tree <- file.path(sourceDir, "benchpro_sampletrees.Rmd")
 
 print(paste("args_list: ", args_list))
 print(paste("Rmd: ", path_to_rmd))
 
-rmarkdown::render(path_to_rmd, output_file=output, params=args_list)
+print(args_list$tools)
+if (args_list$tools != "") {
+  args_list$tools <- unlist(strsplit(args_list$tools, ','))
+}
+
+print(paste(args_list$tools))
+
+rmarkdown::render(path_to_rmd, output_file=paste(output, '_main.html', sep=''), params=args_list)
+rmarkdown::render(path_to_rmd_tree, output_file=paste(output, '_tree.html', sep=''), params=args_list)

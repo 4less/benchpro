@@ -423,37 +423,6 @@ if (length(tree_dict_shared_tips) > 0) {
 ```
 
 
-
-## Trees { .tabset }
-
-```{r, echo=FALSE, results="asis", eval=FALSE, warnings=FALSE, message=FALSE}
-
-children <- c()
-
-for (species in unique(map$Species)) {
-  child <- knitr::knit_child( text=c(paste('### ', gsub("__", "_", species), ' { .tabset }', sep='')), quiet=TRUE)
-  children <- c(children, child)
-  species_df <- map[map$Species == species,]
-  for (tool in unique(species_df$Tool)) {
-    child <- knitr::knit_child( text=c(paste('#### ', tool, ' { .tabset }', sep='')), quiet=TRUE)
-    children <- c(children, child)
-    
-    tool_df <- species_df[species_df$Tool == tool,]
-    for (tree_tool in unique(tool_df$TreeTool)) {
-      child <- knitr::knit_child( text=c(paste('##### ', tree_tool, ' { .tabset }', sep='')), quiet=TRUE)
-      children <- c(children, child)
-      textvar <- paste(species, tool, tree_tool)
-      subdf <- subset(tool_df, TreeTool == tree_tool)
-      
-      child <- knitr::knit_child(input="/usr/users/QIB_fr017/fritsche/Projects/benchpro/knit_tree_child.Rmd", envir=environment(), quiet = TRUE)
-      children <- c(children, child)
-    }
-  }
-}
-cat(children, sep='\n')
-
-
-```
 ## {-}
 
 ```{r}
