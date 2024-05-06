@@ -124,6 +124,7 @@ def get_options():
 
     if hasattr(args, "meta_file"):
         options.meta = Meta(args.meta_file)
+        options.metafile_path = args.meta_file
         options.output = args.output
         options.detailed_output = args.detailed_output
         options.stats_only = args.stats_only

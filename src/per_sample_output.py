@@ -30,10 +30,18 @@ class WorkbookLogSample:
         self.row += 1
         
     def add_sample(self, name, rank, dataset, tool, gold_dict, pred_dict):
-        tp_taxa = set(gold_dict).intersection(pred_dict)
-        fp_taxa = set(pred_dict).difference(gold_dict)
-        fn_taxa = set(gold_dict).difference(pred_dict)
-        
+        # print(rank)
+        # print(gold_dict)
+        # print(sum(g for g in gold_dict.values()))
+        # input()
+        unidentified_taxa = set(g for g in gold_dict.keys() if g.endswith('__') or g == '')
+        gold_dict_id = {k:v for k,v in gold_dict.items() if k not in unidentified_taxa}
+        tp_taxa = set(gold_dict_id).intersection(pred_dict)
+        fp_taxa = set(pred_dict).difference(gold_dict_id)
+        fn_taxa = set(gold_dict_id).difference(pred_dict)
+
+        for t in unidentified_taxa:
+            self.add_row(name, t, rank, dataset, tool, "TN", gold_dict[t], 0)
         for t in tp_taxa:
             self.add_row(name, t, rank, dataset, tool, "TP", gold_dict[t], pred_dict[t])
         for t in fp_taxa:
