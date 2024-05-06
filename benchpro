@@ -1,7 +1,8 @@
 #!/usr/bin/env python
+import sys
 from src.options import get_options, parse_columns
-from src.taxon_profile import ProfileFactory
-from src.statistics import get_rank_statistics, write_statistics
+from src.taxon_profile import ProfileFactory, Rank
+from src.statistics_bp import get_rank_statistics, write_statistics
 from src.per_sample_output import WorkbookLogSample
 from src.external_tools import *
 
@@ -26,6 +27,7 @@ def from_metafile(opts):
 
     md = opts.meta.to_meta_dict()
 
+
     for row in meta.workbook.active:
         if skip:
             skip = False
@@ -35,8 +37,6 @@ def from_metafile(opts):
 
         if any(e.value == None for e in row):
             continue
-
-        print([r.value for r in row])
 
         gold_columns = parse_columns(rd['GoldStdColumns'])
         profile_columns = parse_columns(rd['ProfileColumns'])
@@ -69,6 +69,26 @@ def from_metafile(opts):
             lineage_column=profile_columns['lineage'],
             abundance_column=profile_columns['abundance'],
             rank_column=profile_columns['rank'])
+        
+        # for row in prediction.Rows():
+        #     print(row.HasRank(Rank.DOMAIN))
+        #     print(row.GetLineage().HasRank(Rank.DOMAIN))
+        #     print(row.GetLineage().Get(Rank.DOMAIN))
+
+        # prediction_set = set(row.GetLineage().Get(Rank.DOMAIN) for row in prediction.Rows(Rank.DOMAIN) if row.GetLineage().HasRank(Rank.DOMAIN))
+        # print(prediction_set)
+        # prediction_set = set(row.GetLineage().Get(Rank.DOMAIN) for row in prediction.Rows())
+
+        # print(prediction_set)
+        # input()
+
+        if prediction.IsEmpty():
+            print(prediction_file)
+            # prediction_set = set(row.GetLineage().Get(Rank.DOMAIN) for row in prediction.Rows(Rank.DOMAIN) if row.GetLineage().HasRank(Rank.DOMAIN))
+            # print(prediction_set)
+            for row in prediction.Rows():
+                print(row.ToString())
+            exit(9)
 
         profile_names.append(sample_id)
 
@@ -103,7 +123,7 @@ def from_arguments(opts):
 
     logger.info(f"Number of prediction items: {len(opts.predictions)}")
     for tool, files in opts.predictions.items():  # This is currently not really in use.
-        logger.info(f"Tool: {tool}\nFiles: {files}}}")
+        logger.info(f"Tool: {tool}\nFiles: {files}")
         if tool not in stats_dict:
             stats_dict[tool] = []
             abundance_stats_dict[tool] = []
@@ -166,8 +186,10 @@ def main_script():
         from_arguments(opts)
 
     if not opts.stats_only:
-        execute(run_rbenchpro(opts.output, opts.detailed_output, f"{opts.output}.html"))
+        execute(run_rbenchpro(opts.output, opts.detailed_output, opts.metafile_path, f"{opts.output}.html"))
 
 
 if __name__ == '__main__':
+    logger.remove() #remove the old handler. Else, the old one will work (and continue printing DEBUG logs) along with the new handler added below'
+    logger.add(sys.stdout, level="WARNING")
     main_script()

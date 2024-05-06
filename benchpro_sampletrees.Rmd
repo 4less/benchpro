@@ -1,0 +1,170 @@
+---
+title: "Per Sample Visualization"
+author: "Joachim Fritscher"
+date: "2023-10-02"
+output: 
+  html_document:
+  toc: true
+  toc_float: true
+  toc_collapsed: true
+  toc_depth: 3
+  number_sections: true
+  theme: lumen
+params:
+  input: input
+  input_detailed: input_detailed
+  meta: meta
+  tools: tools
+---
+
+```{r setup, include=FALSE, message=FALSE, warning = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(scipen=999)
+source("functions.R")
+```
+
+
+
+```{r, echo=FALSE, warning = FALSE}
+# Setting up variables
+ranks <- c("Domain", "Phylum", "Class", "Order", "Family", "Genus", "Species", "Strain")
+ranks <- c("Phylum", "Class", "Order", "Family", "Genus", "Species")
+
+dataset_path <- "/media/fritsche/Extreme_SSD/results/CAMI/HumanToy/Benchmark/new_all/stats.tsv"
+dataset_detailed_path <- "/media/fritsche/Extreme_SSD/results/CAMI/HumanToy/Benchmark/new_all/stats_detailed.xlsx"
+meta_path <- "/media/fritsche/Extreme_SSD/results/CAMI/HumanToy/Benchmark/meta.xlsx"
+tree_based_analysis <- TRUE
+
+tools <- ""
+if (params$input != "debug" & file.exists(params$input)) {
+  dataset_path <- params$input
+  dataset_detailed_path <- params$input_detailed
+  meta_path <- params$meta
+  tree_based_analysis <- TRUE
+  tools <- params$tools
+  
+  if (!file.exists(dataset_path) | !file.exists(dataset_detailed_path) | !file.exists(meta_path)) {
+    quit()
+  }
+}
+
+ds <- read.csv(dataset_path, header=TRUE, sep='\t', row.names=NULL)
+if (length(tools) == 1 & all(tools == "")) {
+  tools <- unique(ds$tool)
+} else {
+  ds <- ds %>% filter(tool %in% tools)
+}
+ds.detail <- read_xlsx(dataset_detailed_path) %>% filter(Tool %in% tools)
+meta <- read_xlsx(meta_path)
+
+meta$AvailableSpecies[meta$AvailableSpecies == "NA"] <- NA
+meta$GoldStdTree[meta$GoldStdTree == "NA"] <- NA
+spdict <- load_species_dict(na.omit(meta$AvailableSpecies))
+
+if (length(unique(ds$dataset)) == 1) {
+  ds.all <- ds
+} else {
+  ds.tmp <- ds
+  ds.tmp$dataset <- "all"
+  ds.all <- rbind(ds.tmp, ds)
+  ds.all$tool <- factor(ds.all$tool)
+  remove(ds.tmp)
+  
+  ds.all$dataset <- factor(ds.all$dataset, levels=c("all", unique(ds$dataset)), ordered = TRUE)
+}
+
+ds.all$sample <- factor(ds.all$sample)
+ds.all$rank <- factor(ds.all$rank, levels=c("Domain", "Phylum", "Class", "Order", "Family", "Genus", "Species", "Strain"), ordered = TRUE)
+ds.all$metric <- factor(ds.all$metric, levels=c("F1", "Sensitivity", "Precision", "TP", "TN", "FP", "FN", "PearsonCorrelationIntersect", "PearsonCorrelationUnion", "BrayCurtisIntersect", "BrayCurtisUnion", "L2Intersect", "L2Union", "ShannonDiversity", "ShannonDiversityGold", "ShannonDiversityDiff"), ordered = TRUE)
+
+tools_subset <- unique(ds.all$tool)
+tools_subset <- factor(tools_subset)
+```
+
+
+# Overview
+This RMarkdown is for creating reports as part of the benchpro profiler evaluation.
+
+```{r, echo=FALSE, results="asis", eval=TRUE, fig.width=12, fig.height=12, warning=FALSE}
+library(DT)
+trees <- as.character(na.omit(unique(meta$GoldStdTree)))
+tree_samples <- meta$ID[!is.na(meta$GoldStdTree)]
+tree_tools <- meta$Tool[!is.na(meta$GoldStdTree)]
+
+detail.withtree <- ds.detail %>% filter(Sample %in% tree_samples & Rank == "Species")
+summary_table <- detail.withtree %>% 
+  filter(Rank == "Species") %>% 
+  group_by(Sample) %>% count(Type) %>% 
+  pivot_wider(names_from=Type, values_from = n, values_fill = 0) %>% 
+  as.data.frame()
+summary_table$`FP + FN` <- summary_table$FN + summary_table$FP
+datatable(summary_table)
+```
+
+
+# Per Sample Visualization of TP/FP/FN { .tabset }
+
+```{r TreeVis, echo=FALSE, results="asis", eval=TRUE, fig.width=12, fig.height=12, warning=FALSE}
+trees <- as.character(na.omit(unique(meta$GoldStdTree)))
+tree_samples <- meta$ID[!is.na(meta$GoldStdTree)]
+tree_tools <- meta$Tool[!is.na(meta$GoldStdTree)]
+
+detail.withtree <- ds.detail %>% filter(Sample %in% tree_samples)
+children <- c()
+
+n <- 1000
+for (tree_path in rev(trees)) {
+  
+  tree <- load_tree(tree_path)
+  
+  tools <- as.character(na.omit(unique(meta$Tool[meta$GoldStdTree == tree_path])))
+  
+  for (tool in tools) {
+    detail.sub.df <- detail.withtree %>% filter(Tool == tool)
+    children <- c(children, knitr::knit_child(text = c(paste('## ', tool, ' { .tabset }', sep = '')), quiet = TRUE))
+    
+    for (ds in unique(detail.sub.df$Dataset)) {
+      children <- c(children, knitr::knit_child(text = c(paste('### ', ds, ' { .tabset .tabset-dropdown }', sep = '')), quiet = TRUE))
+      detail.ds <- detail.sub.df %>% filter(Dataset == ds)
+      for (sample in unique(detail.ds$Sample)) {
+        spdict_path <<- as.character(meta[meta$ID == sample, "AvailableSpecies"])
+        available_species <- spdict[[spdict_path]]
+        
+        
+        children <- c(children, knitr::knit_child(text = c(paste('#### ', sample, sep = '')), quiet = TRUE))
+        
+        detail.df <- detail.ds %>% filter(Sample == sample & Rank == "Species")
+        
+        detail.df$abundance <- (if_else(detail.df$GOLD == 0, detail.df$PRED, detail.df$GOLD) * 100)
+        present_species <- unique(detail.df$Taxon)
+        subtree <- keep.tip(tree, present_species[present_species %in% tree$tip.label])
+        
+        tree.plot <- suppressWarnings(plot.tree.abundance(subtree, detail.df, available_species=available_species) + ggtitle(paste(sample)))
+  
+        children <- c(children, knitr::kable(detail.df %>% count(Type), "html"))
+        
+        children <-
+          c(children, knitr::knit_child(
+            text = c(
+              "```{r, echo=FALSE, results=\"asis\", fig.width=12, fig.height=12, warning=FALSE}",
+              "print(tree.plot)",
+              # "print(\"asd\")",
+              "```"
+            ),
+            quiet = TRUE
+          ))
+        if (n == 0) break
+        n <- n -1
+      }
+      if (n == 0) break
+    }
+    
+    if (n == 0) break
+  }
+}
+cat(children, sep = '\n')
+
+
+
+```
+

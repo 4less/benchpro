@@ -13,210 +13,582 @@ output:
 params:
   input: input
   input_detailed: input_detailed
+  meta: meta
   tools: tools
 ---
 
-```{r setup, include=FALSE}
+```{r setup, echo=FALSE, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, fig.width=12)
 options(scipen=999)
-library(ggplot2)
-library(tidyr)
-library(dplyr)
-library(knitr)
-library(pandoc)
-library(stringr)
-library(readxl)
-library(plotly)
+options(dplyr.summarise.inform = FALSE)
 ```
 
-
+```{r libraries, echo=FALSE, include=FALSE, warnings=FALSE}
+source("functions.R")
+library(gridExtra)
+library(cowplot)
+library(scales)
+```
 
 ```{r, echo=FALSE}
 # Setting up variables
-ranks <- c("Domain", "Phylum", "Class", "Order", "Family", "Genus", "Species", "Strain")
-ranks <- c("Phylum", "Class", "Order", "Family", "Genus", "Species")
+ranks <- c("Domain", "Phylum", "Class", "Order", "Family", "Genus", "Species", "Species Adj", "Strain")
+ranks_sp <- c("Domain", "Phylum", "Class", "Order", "Family", "Genus", "Species")
+metrics <- c("F1", "Sensitivity", "Precision", "TP", "TN", "FP", "FN", 
+             "PearsonCorrelationIntersect", "PearsonCorrelationUnion","SpearmanCorrelationIntersect", "SpearmanCorrelatioUnion", 
+             "Bray-Curtis similarity", "BrayCurtisIntersect", "BrayCurtisUnion", "Bray-Curtis Dissimilarity", 
+             "L2Intersect", "L2Union", "ShannonDiversity", "ShannonDiversityGold", "ShannonDiversityDiff",
+             "ShannonDiversityTP", "ShannonDiversityGoldTP", "ShannonDiversityDiffTP", "RichnessTP", "RichnessGoldTP", "RichnessTPDiff")
 ```
 
 
+```{r, echo=FALSE}
+run_overview <- TRUE
+run_dataset_summary <- TRUE
+run_rank_wise <- TRUE
+run_adjusted_fpfn <- TRUE
+run_overview_fpfn <- TRUE
+run_samplewise_fpfn <- TRUE
+run_rank_wise_abundance <- TRUE
+run_per_tool  <- TRUE
+run_overview_div <- FALSE 
+```
+
+
+```{r debug, echo=FALSE}
+meta_path <- "/media/fritsche/Extreme_SSD/results/CAMI/HumanToy/Benchmark/meta.xlsx"
+stats_path <- "/media/fritsche/Extreme_SSD/results/CAMI/HumanToy/Benchmark/new_all/stats.tsv"
+stats_detailed_path <- "/media/fritsche/Extreme_SSD/results/CAMI/HumanToy/Benchmark/new_all/stats_detailed.xlsx"
+
+dataset_test_path <- "/media/fritsche/Extreme_SSD/results/CAMI/HumanToy/Benchmark/new_all/stats_test.tsv"
+dataset_detailed_test_path <- "/media/fritsche/Extreme_SSD/results/CAMI/HumanToy/Benchmark/new_all/stats_detailed_test.tsv"
+
+dataset_bracken_path <- "/media/fritsche/Extreme_SSD/results/CAMI/HumanToy/Benchmark/new_all/bracken_test/stats.tsv"
+dataset_bracken_detailed_path <- "/media/fritsche/Extreme_SSD/results/CAMI/HumanToy/Benchmark/new_all/bracken_test/stats_detailed.xlsx"
+
+meta_path <- "/media/fritsche/Extreme_SSD/results/CAMI/MouseGut/Benchmark/meta.xlsx"
+stats_path <- "/media/fritsche/Extreme_SSD/results/CAMI/MouseGut/Benchmark/stats_output/stats.tsv"
+stats_detailed_path <- "/media/fritsche/Extreme_SSD/results/CAMI/MouseGut/Benchmark/stats_output/stats_detailed.xlsx"
+
+# stats_path <- dataset_test_path
+# stats_detailed_path <- dataset_detailed_test_path
+# 
+# meta_path <- "/media/fritsche/Extreme_SSD/results/CAMI/Marine/Benchmark/meta.xlsx"
+# stats_path <- "/media/fritsche/Extreme_SSD/results/CAMI/Marine/Benchmark/stats_output/stats.tsv"
+# stats_detailed_path <- "/media/fritsche/Extreme_SSD/results/CAMI/Marine/Benchmark/stats_output/stats_detailed.xlsx"
+meta_path <- "/media/fritsche/Extreme_SSD/results/CAMI/AllCAMI/Benchmark/meta.xlsx"
+stats_path <- "/media/fritsche/Extreme_SSD/results/CAMI/AllCAMI/Benchmark/stats_output/stats.tsv"
+stats_detailed_path <- "/media/fritsche/Extreme_SSD/results/CAMI/AllCAMI/Benchmark/stats_output/stats_detailed.xlsx"
+tool_color_path <- "/media/fritsche/Extreme_SSD/results/CAMI/tool_color_all.xlsx"
+
+dataset_sub <- NULL
+
+```
 
 # Data analysis {.tabset}
 This RMarkdown is for creating reports as part of the benchpro profiler evaluation.
 
-```{r, echo=FALSE}
-dataset_path <- "/usr/users/QIB_fr017/fritsche/Projects/Results/CAMI-BENCHMARKS/results/combined_with_opal/combined.tsv"
-dataset_path <- "/media/fritsche/Extreme_SSD/results/CAMI/HumanToy/Benchmark/tmp/output.tsv"
-dataset_detailed_path <- "/media/fritsche/Extreme_SSD/results/CAMI/HumanToy/Benchmark/tmp/detailed.xlsx"
-# if (!interactive()) {
-#   dataset_path <- params$input
-#   dataset_detailed_path <- params$input_detailed
-# }
-
-ds <- read.csv(dataset_path, header=TRUE, sep='\t', row.names=NULL)
-ds.detail <- read_xlsx(dataset_detailed_path)
-
-protal_sd <- sd(ds %>% filter(tool == "protal_f1" & metric == "F1" & rank == "Species") %>% pull(value))
-protal_mean <- mean(ds %>% filter(tool == "protal_f1" & metric == "F1" & rank == "Species") %>% pull(value))
-protal_median <- median(ds %>% filter(tool == "protal_f1" & metric == "F1" & rank == "Species") %>% pull(value))
-print(paste("F1:", protal_mean, "+-", protal_sd))
-
-mp4gtdb_sd <- sd(ds %>% filter(tool == "MetaPhlAn4 GTDB" & metric == "F1" & rank == "Species") %>% pull(value))
-mp4gtdb_mean <- mean(ds %>% filter(tool == "MetaPhlAn4 GTDB" & metric == "F1" & rank == "Species") %>% pull(value))
-print(paste("F1:", mp4gtdb_mean, "+-", mp4gtdb_sd))
-
-mp4_sd <- sd(ds %>% filter(tool == "MetaPhlAn4" & metric == "F1" & rank == "Species") %>% pull(value))
-mp4_mean <- mean(ds %>% filter(tool == "MetaPhlAn4" & metric == "F1" & rank == "Species") %>% pull(value))
-print(paste("F1:", mp4_mean, "+-", mp4_sd))
-
-
-if (length(unique(ds$dataset)) == 1) {
-  ds.all <- ds
+```{r data_gen, echo=TRUE, include=FALSE}
+tree_based_analysis <- TRUE
+tools <- NULL
+tools <- c("bracken", "bracken GTDB", "mOTUs3", "mOTUs3 GTDB", "MetaPhlAn4", "MetaPhlAn4 GTDB", "protal")
+if (params$input != "debug" & file.exists(params$input)) {
+  stats_path <- params$input
+  stats_detailed_path <- params$input_detailed
+  meta_path <- params$meta
+  tree_based_analysis <- TRUE
+  tools <- params$tools
+  
+  if (!file.exists(stats_path) | !file.exists(stats_detailed_path) | !file.exists(meta_path)) {
+    quit()
+  }
 } else {
-  ds.tmp <- ds
-  ds.tmp$dataset <- "all"
-  ds.all <- rbind(ds.tmp, ds)
-  ds.all$tool <- factor(ds.all$tool)
-  remove(ds.tmp)
-  
-  ds.all$dataset <- factor(ds.all$dataset, levels=c("all", unique(ds$dataset)), ordered = TRUE)
+  dataset_sub <- "_(Marine|rhizosphere)_(5|6)"
 }
-  
-ds.all$sample <- factor(ds.all$sample)
-ds.all$rank <- factor(ds.all$rank, levels=c("Domain", "Phylum", "Class", "Order", "Family", "Genus", "Species", "Strain"), ordered = TRUE)
-ds.all$metric <- factor(ds.all$metric, levels=c("F1", "Sensitivity", "Precision", "TP", "TN", "FP", "FN", "PearsonCorrelationIntersect", "PearsonCorrelationUnion", "BrayCurtisIntersect", "BrayCurtisUnion", "L2Intersect", "L2Union", "ShannonDiversity", "ShannonDiversityGold", "ShannonDiversityDiff"), ordered = TRUE)
+test <- read_table(stats_path)
+test$metric 
 
-# if ("dataset" %in% unique(ds.all$dataset)) {
-#   ds.all$dataset <- factor(ds.all$dataset, levels=c("all", unique(ds$dataset)), ordered = TRUE)
-# }
+data <- load_data(
+  meta_path = meta_path,
+  stats_path = stats_path,
+  stats_detailed_path = stats_detailed_path,
+  tool_color_path = tool_color_path)
 
-# if (length(tools_subset) == 0) {
-#   tools_subset <- unique(ds.all$tool)
-# }
-tools_subset <- unique(ds.all$tool)
-tools_subset <- factor(tools_subset)
-summary(ds.all)
-```
-
-# Data analysis {.tabset}
-## Rank-wise analysis { .tabset }
-
-```{r, echo=FALSE, results="asis", eval = TRUE}
-
-for (target_rank in rev(ranks)) {
-  contained <- target_rank %in% unique(ds.all$rank)
-  if (!contained) next
-  
-  asis_output(paste("### ", target_rank, " level  \n", sep=""))
-  
-  
-  ds.plot <- ds.all %>% 
-    dplyr::filter(rank == target_rank & metric %in% c("F1", "Sensitivity", "Precision") & tool %in% tools_subset) %>% 
-    ggplot(aes(x=reorder(tool, -value), y=value, fill=tool)) +
-      ggtitle(target_rank) +
-      geom_violin()+
-      geom_boxplot(width=.2)+
-      #geom_boxplot() +
-      geom_jitter(color="black", size=0.4, alpha=0.2, height = 0) +
-      facet_grid(rows = vars(metric), cols = vars(dataset), scales="free_y") +
-      xlab("") + ylab("Value") + theme(axis.title.x=element_blank(),
-            axis.text.x=element_blank(),
-            axis.ticks.x=element_blank())
-  print(ds.plot)
+if (is.null(tools)) {
+  tools <- unique(data$meta$Tool)
+} else {
+  data$meta <- data$meta %>% filter(Tool %in% tools)
+  data$stats <- data$stats %>% filter(tool %in% tools)
+  data$stats_detailed <- data$stats_detailed %>% filter(Tool %in% tools)
 }
 
-```
-
-
-## Rank-wise abundance analysis { .tabset }
-
-```{r, echo=FALSE, results="asis", eval = TRUE}
-for (target_rank in rev(ranks)) {
-  contained <- target_rank %in% unique(ds.all$rank)
-  if (!contained) next
-  
-  asis_output(paste("### ", target_rank, " level  \n", sep=""))
-  
-  ds.plot <- ds.all %>% 
-    dplyr::filter(rank == target_rank & metric %in% c("PearsonCorrelationUnion", "PearsonCorrelationIntersect", "BrayCurtisUnion", "BrayCurtisIntersect", "L2Union", "L2Intersect") & tool %in% tools_subset) %>% 
-    ggplot(aes(x=reorder(tool, -value), y=value, fill=tool)) +
-      ggtitle(target_rank) +
-      geom_violin()+
-      geom_boxplot(width=.2)+
-      #geom_boxplot() +
-      geom_jitter(color="black", size=0.4, alpha=0.2, height = 0) +
-      facet_grid(rows = vars(metric), cols = vars(dataset), scales="free_y") +
-      xlab("") + ylab("Value") + theme(axis.title.x=element_blank(),
-            axis.text.x=element_blank(),
-            axis.ticks.x=element_blank())
-  print(ds.plot)
+## DEBUG ################
+if (!is.null(dataset_sub)) {
+  data$stats <- data$stats[grepl(dataset_sub, data$stats$sample),]
+  data$stats_detailed <- data$stats_detailed[grepl(dataset_sub, data$stats_detailed$Sample),]
+  data$meta <- data$meta[grepl(dataset_sub, data$meta$ID),]
 }
 
+data <- generate_data(data)
 
 
 ```
-
-
-## Tool-wise analysis { .tabset }
-
-```{r, echo=FALSE, results="asis", eval = TRUE}
-for (target_tool in unique(ds.all$tool)) {
   
-  asis_output(paste("### ", target_tool, " level  \n", sep=""))
-  
-  ds.plot <- ds.all %>% 
-    dplyr::filter(tool == target_tool & metric %in% c("F1", "Sensitivity", "Precision")) %>%
-    ggplot(aes(x=rank, y=value, fill=rank)) +
-      ggtitle(target_tool) +
-      geom_violin()+
-      geom_boxplot(width=.2)+
-      #geom_boxplot() +
-      geom_jitter(color="black", size=0.4, alpha=0.2, height = 0) +
-      facet_grid(rows = vars(metric), cols = vars(dataset), scales="free_y") +
-      xlab("") + ylab("Value") + theme(axis.title.x=element_blank(),
-            axis.text.x=element_blank(),
-            axis.ticks.x=element_blank())
-  print(ds.plot)
-}
 
+```{r overview_div, echo=FALSE, results="asis", eval = run_overview_div}
+knitr::knit_child(text=c("# Overview Diversity",
+                         "The tools use different taxonomies and thus group species differently. Based on the gold-std profile for each of the tools the following are the number of species in the gold-standard profiles. This is ONLY based on the gold-std profile, not on the tools prediction."))
 
+overview.df <- data$stats_all %>% filter(metric %in% c("TP", "FN") & rank == "Species" & adjusted == FALSE) %>% 
+  group_by(tool, dataset) %>%  drop_na() %>%
+  summarise(positives = sum(value)) %>% as.data.frame() %>%
+  pivot_wider(names_from="dataset", values_from = "positives")
+all_column <- if_else(length(unique(ds$dataset)) == 1, unique(ds$dataset)[1], "all")
+
+overview.df$species_richness <- round(overview.df[, all_column] / max(overview.df[, all_column]), digits=4) %>% pull(all)
+datatable(overview.df)
 ```
 
 
-## Sample-wise analysis { .tabset }
+```{r overview, echo=FALSE, results="asis", eval = run_overview, warnings=FALSE, message=FALSE}
+children <- c()
+children <- c(children, knitr::knit_child(text=c(paste('# Overview { .tabset .tabset-dropdown }', sep='')), quiet=TRUE))
+datasets <- sort(unique(data$stats_all$dataset))
+target_metrics <- c("F1", "Sensitivity", "Precision")
+for (dset in datasets) {
+  if (nrow(data$stats_all %>% 
+      filter(metric %in% target_metrics & adjusted & dataset == dset)) == 0) {
+    next
+  }
+  all_stats_adjusted <- data$stats_all %>% 
+    filter(metric %in% target_metrics & adjusted & dataset == dset) %>%
+    pivot_wider(names_from = "metric", values_from = "value") %>%
+    select(sample, tool, Sensitivity, Precision, F1) %>%
+    mutate(F1=round(F1, 3), Precision=round(Precision, 3), Sensitivity=round(Sensitivity, 3))
+  
+  children <- c(children, knitr::knit_child( text=c(paste('## ', dset, sep='')), quiet=TRUE))
+  children <-
+    c(children, knitr::knit_child(
+      text = c(
+        "```{r, echo=FALSE, results=\"asis\", fig.width=12, fig.height=12, warning=FALSE}",
+        "datatable(all_stats_adjusted)",
+        "```"
+      ),
+      quiet = TRUE
+    ))
+}
+cat(children, sep='\t')
+```
 
-```{r, echo=FALSE, results="asis", eval = TRUE}
-# dataset_detailed_path <- "/media/fritsche/Extreme_SSD/results/CAMI/HumanToy/Benchmark/tmp/detailed.xlsx"
-# ds.detail <- read_xlsx(dataset_detailed_path)
-# ds.detail
+
+
+
+<!-- # Overview Predictions { .tabset .tabset-dropdown } -->
+```{r , echo=FALSE, results="asis", eval = FALSE, warnings=FALSE, message=FALSE}
+options(dplyr.summarise.inform = FALSE)
 
 children <- c()
-#### 1 A {.tabset .tabset-fade .tabset-pills}
-for (dataset in unique(ds.detail$Dataset)) {
+for (target_rank in rev(RANKS)) {
+  contained <- target_rank %in% unique(data$stats$rank)
+  if (!contained) next
+  children <- c(children, knitr::knit_child( text=c(paste('## ', target_rank, sep='')), quiet=TRUE))
+  overview.df <- data$stats %>% filter(metric %in% c("TP", "FN") & rank == target_rank) %>% 
+    group_by(tool, dataset) %>%
+    summarise(positives= sum(value), TP=sum(value[metric == "TP"])) %>% 
+    mutate(Sensitivity=round(TP/positives, 3)) %>% as.data.frame() %>% select(c("tool", "dataset", "Sensitivity"))  %>% 
+    pivot_wider(names_from="dataset", values_from = c("Sensitivity"))
+  children <-
+    c(children, knitr::knit_child(
+      text = c(
+        "```{r, echo=FALSE, results=\"asis\", fig.width=12, fig.height=12, warning=FALSE}",
+        "datatable(overview.df)",
+        "```"
+      ),
+      quiet = TRUE
+    ))
+}
+
+cat(children, sep='\t')
+```
+
+
+# Data analysis {.tabset}
+
+```{r dataset_summary, eval=run_dataset_summary, echo=FALSE, message=FALSE, warning=FALSE, results="asis", warnings=FALSE}
+###############################################################################################
+## Rank 
+
+
+target_metrics <- c("F1", "Sensitivity", "Precision")
+
+n_datasets <- length(unique(data$stats_all$dataset))
+height_single <- 0.5+2*n_datasets
+children <- c()
+children <- c(children, knitr::knit_child( text=c(paste('## Dataset Summary { .tabset .tabset-dropdown }', sep='')), quiet=TRUE))
+
+
+for (target_dataset in unique(data$stats_all$dataset)) {
+
+  children <- c(children, knitr::knit_child( text=c(paste('### ', target_dataset, " { .tabset .tabset-dropdown }", sep='')), quiet=TRUE))
+  
+  for (r in rev(sort(unique(data$stats_all$rank)))) {
+    rank_df <- data$stats_all %>% 
+      filter(rank == r & !is.na(metric) & dataset == target_dataset)
+    
+    if (nrow(rank_df) == 0) {
+      next
+    }
+  
+    # summary_table <- 
+    
+    summary_table <- rank_df %>% 
+      group_by(tool, dataset, metric) %>%
+      summarise(mean_value=mean(value), sd_value=sd(value)) %>%
+      mutate(label=paste(round(mean_value, 3), "±", round(sd_value, 3), sep='')) %>%
+      select(tool, metric, mean_value, label)
+    
+    
+    children <- c(children, knitr::knit_child( text=c(paste('#### ', r, sep='')), quiet=TRUE))
+    children <- c(children, knitr::knit_child(
+      text = c(
+        paste("```{r, echo=FALSE, results=\"asis\", fig.width=", 12, ", fig.height=", height_single, ", warning=FALSE}", sep=''),
+        "datatable(summary_table)",
+        "```"
+      ),
+      quiet = TRUE
+    ))
+  }
+  
+}
+children <-
+  c(children, knitr::knit_child(
+    text = c(
+      "```{r, echo=FALSE, results=\"asis\", fig.width=12, fig.height=12, warning=FALSE}",
+      "cat('\n\n\n\n\n\n\n\n\n\n')",
+      "```"
+    ),
+    quiet = TRUE
+  ))
+cat(children, sep='\n')
+```
+
+
+```{r rank_wise, echo=FALSE, results="asis", eval = run_rank_wise}
+###############################################################################################
+## Rank 
+
+
+target_tools <-  c("protal", "MetaPhlAn4 GTDB", "mOTUs3 GTDB")
+target_metrics <- c("F1", "Sensitivity", "Precision")
+
+n_datasets <- length(unique(data$stats_all$dataset))
+height_single <- 0.5+2*n_datasets
+children <- c()
+children <- c(children, knitr::knit_child( text=c(paste('## Rank-wise analysis { .tabset .tabset-dropdown }', sep='')), quiet=TRUE))
+
+for (r in rev(sort(unique(data$stats_all$rank)))) {
+  rank_df <- data$stats_all %>% filter(rank == r)
+  
+  if (nrow(rank_df) == 0) {
+    next
+  }
+  
+  children <- c(children, knitr::knit_child( text=c(paste('### ', r, sep='')), quiet=TRUE))
+  
+  summary_plot <- plot_all(rank_df %>% filter(metric %in% target_metrics), r, tool_colors = data$tool_colors)
+  
+  
+  children <- c(children, knitr::knit_child(
+    text = c(
+      paste("```{r, echo=FALSE, results=\"asis\", fig.width=", 12, ", fig.height=", height_single, ", warning=FALSE}", sep=''),
+      "print(summary_plot)",
+      "```"
+    ),
+    quiet = TRUE
+  ))
+}
+children <-
+  c(children, knitr::knit_child(
+    text = c(
+      "```{r, echo=FALSE, results=\"asis\", fig.width=12, fig.height=12, warning=FALSE}",
+      "cat('\n\n\n\n\n\n\n\n\n\n')",
+      "```"
+    ),
+    quiet = TRUE
+  ))
+cat(children, sep='\n')
+```
+
+
+
+```{r rank_wise_abundance, echo=FALSE, results="asis", eval = run_rank_wise_abundance}
+###############################################################################################
+## Rank 
+
+target_metrics_intersect <- c("PearsonCorrelationIntersect", "L2Intersect")
+target_metrics_union <- c("PearsonCorrelationUnion", "BrayCurtisIntersect", "L2Union")
+
+n_datasets <- length(unique(data$stats_all$dataset))
+height_single <- 0.5+2*n_datasets
+children <- c()
+children <- c(children, knitr::knit_child( text=c(paste('## Rank-wise abundance analysis { .tabset .tabset-dropdown }', sep='')), quiet=TRUE))
+
+for (r in rev(sort(unique(data$stats_all$rank)))) {
+  rank_df <- data$stats_all %>% filter(rank == r)
+  
+  if (nrow(rank_df) == 0) {
+    next
+  }
+  
+  children <- c(children, knitr::knit_child( text=c(paste('### ', r, sep='')), quiet=TRUE))
+  
+  summary_plot_intersect <- rank_df %>% 
+    filter(metric %in% target_metrics_intersect) %>% 
+    {if(nrow(.) == 0) NULL else .} %>%
+    plot_all(r, tool_colors = data$tool_colors)
+  summary_plot_union <- rank_df %>% 
+    filter(metric %in% target_metrics_union) %>% 
+    {if(nrow(.) == 0) NULL else .} %>%
+    plot_all(r, tool_colors = data$tool_colors)
+  
+  children <- c(children, knitr::knit_child(
+    text = c(
+      paste("```{r, echo=FALSE, results=\"asis\", fig.width=", 12, ", fig.height=", height_single, ", warning=FALSE}", sep=''),
+      ifelse(is.null(summary_plot_intersect), "", "print(summary_plot_intersect)"),
+      ifelse(is.null(summary_plot_union), "", "print(summary_plot_union)"),
+      "```"
+    ),
+    quiet = TRUE
+  ))
+}
+cat(children, sep='\n')
+```
+
+
+```{r overview_fpfn, echo=FALSE, results="asis", eval=run_overview_fpfn, fig.width=12, fig.height=12, warning=FALSE}
+
+children <- c()
+children <- c(children, knitr::knit_child( text=c(paste('## Overview FP/FN { .tabset .tabset-dropdown }', sep='')), quiet=TRUE))
+
+summary_table <- data$stats_detailed_new %>% 
+  filter(Rank == "Species") %>% 
+  group_by(Sample) %>% count(Type) %>% 
+  pivot_wider(names_from=Type, values_from = n, values_fill = 0) %>% 
+  as.data.frame()
+summary_table$`FP + FN` <- summary_table$FN + summary_table$FP
+
+children <- c(children, knitr::knit_child( text=c(paste('### Species Adj', sep='')), quiet=TRUE))
+children <-
+  c(children, knitr::knit_child(
+    text = c(
+      "```{r, echo=FALSE, results=\"asis\", fig.width=12, fig.height=12, warning=FALSE}",
+      "datatable(summary_table)",
+      "```"
+    ),
+    quiet = TRUE
+  ))
+
+for (r in rev(sort(unique(data$stats_detailed$Rank)))) {
+  summary_table <- data$stats_detailed %>% 
+    filter(Rank == r) %>% 
+    group_by(Sample) %>% count(Type) %>% 
+    pivot_wider(names_from=Type, values_from = n, values_fill = 0) %>% 
+    as.data.frame()
+  if (all(c("FP", "FN") %in% c(colnames(summary_table)))) {
+    summary_table$`FP + FN` <- summary_table$FN + summary_table$FP
+  }
+  
+  children <- c(children, knitr::knit_child( text=c(paste('### ', r, sep='')), quiet=TRUE))
+  children <-
+    c(children, knitr::knit_child(
+      text = c(
+        "```{r, echo=FALSE, results=\"asis\", fig.width=12, fig.height=12, warning=FALSE}",
+        "datatable(summary_table)",
+        "```"
+      ),
+      quiet = TRUE
+    ))
+}
+cat(children, sep='\t')
+```
+
+
+<!-- SAMPLE ADJUSTED FP FN LISTINGS -->
+
+```{r adjusted_fpfn, echo=FALSE, results="asis", eval = run_adjusted_fpfn}
+children <- c(knitr::knit_child(text='## Adjusted FP/FN { .tabset .tabset-dropdown }', quiet=TRUE))
+
+tools <- sort(unique(data$stats_detailed_new$Tool))
+target_metrics <- c("F1", "Sensitivity", "Precision")
+
+for (tool in tools) {
+  display.df <- data$stats_detailed_merged %>% 
+    filter(Tool == tool) %>%
+    mutate(Abundance=ifelse(Type == "FP" | Type == "FFP", PRED, GOLD)) %>%
+    select(Sample, Taxon, Tool, Type, Abundance, Dist, Detectable)
+  
+  children <- c(children, knitr::knit_child( text=c(paste('### ', tool, sep='')), quiet=TRUE))
+  children <- c(children, knitr::knit_child(
+    text = c(
+      "```{r, echo=FALSE, results=\"asis\", fig.width=12, fig.height=12, warning=FALSE}",
+      "datatable(display.df)",
+      "```"
+    ), quiet=TRUE
+  ))
+}
+cat(children, sep='\n')
+```
+
+
+
+```{r context_fpfn, echo=FALSE, results="asis", eval=TRUE, fig.width=12, fig.height=12, warning=FALSE}
+
+children <- c(knitr::knit_child( text='## Context FP/FN { .tabset .tabset-dropdown }', quiet=TRUE))
+
+data$fp_neighbors$Sample
+for (dataset in sort(unique(data$fp_neighbors$Dataset))) {
+  
+  fp_neighbors.plot <- data$fp_neighbors %>%
+    filter(dataset == Dataset) %>%
+    ggplot(aes(x=min_tp, y=GOLD, color=Tool)) +
+    facet_wrap(~Tool) +
+    xlab("Tree distance to closest TP") +
+    ylab("True abundance of closest TP") +
+    geom_point(alpha=0.1, size=2)
+  
+  if (!is.null(data$tool_colors)) {
+    fp_neighbors.plot <- fp_neighbors.plot +
+      scale_color_manual(values = data$tool_colors)
+  }
+  
+  children <- c(children, knitr::knit_child( text=c(paste('### ', dataset, sep='')), quiet=TRUE))
+  children <- c(children, knitr::knit_child(
+      text = c(
+        "```{r, echo=FALSE, results=\"asis\", fig.width=12, fig.height=6, warning=FALSE}",
+        "print(fp_neighbors.plot)",
+        "```"
+      ),
+      quiet = TRUE
+    ))
+}
+cat(children, sep='\n')
+```
+
+
+
+<!-- Per tool analysis -->
+
+```{r pertool, echo=FALSE, results="asis", eval = run_per_tool}
+n_datasets <- length(unique(data$stats_all$dataset))
+height_single <- 0.5+1.3*n_datasets
+children <- c(knitr::knit_child( text='## Tool-wise analysis { .tabset .tabset-dropdown }', quiet=TRUE))
+
+all_stats_m <- data$stats_all
+all_stats_m[all_stats_m$adjusted, "rank"] <- "Species Adj"
+tools <- unique(all_stats_m$tool)
+
+
+for (t in tools) {
+  tool_df <- all_stats_m %>% filter(tool == t)
+  
+  children <- c(children, knitr::knit_child( text=c(paste('### ', t, sep='')), quiet=TRUE))
+  
+  summary_plot <- plot_tool(tool_df, t)
+
+  children <- c(children, knitr::knit_child(
+    text = c(
+      paste("```{r, echo=FALSE, results=\"asis\", fig.width=", 12, ", fig.height=", height_single, ", warning=FALSE}", sep=''),
+      "print(summary_plot)",
+      "```"
+    ),
+    quiet = TRUE
+  ))
+}
+cat(children, sep='\n')
+```
+
+<!--Abundance Threshold analysis -->
+
+```{r abundancethreshold, echo=FALSE, results="asis", eval = TRUE}
+children <- c()
+children <- c(knitr::knit_child( text='## Abundance Threshold Analysis { .tabset .tabset-dropdown }', quiet=TRUE))
+
+ds.detail.threshold <- data$stats_detailed
+ds.detail.threshold$Threshold <- 0
+for (threshold in seq(0,0.002, 0.00005)) {
+  ds.detail.threshold <- rbind(ds.detail.threshold, apply_abundance_threshold(data$stats_detailed, threshold))
+}
+
+ds.detail.adj.threshold <- data$stats_detailed_new
+ds.detail.adj.threshold$Threshold <- 0
+for (threshold in seq(0,0.002, 0.00005)) {
+  ds.detail.adj.threshold <- rbind(ds.detail.adj.threshold, apply_abundance_threshold(data$stats_detailed_new, threshold))
+}
+
+ds.stats.threshold <- details_to_binary_stats2(ds.detail.threshold, data$stats)
+ds.stats.adj.threshold <- details_to_binary_stats2(ds.detail.adj.threshold, data$stats)
+
+target_dataset <- ifelse(data$has_multiple_datasets, ALL_DATASET, as.character(ds.stats.threshold %>% pull(dataset) %>% head(n=1)))
+summary.plot <- plot_abundance_threshold(ds.stats.threshold %>% filter(dataset == target_dataset))
+summary.plot.adj <- plot_abundance_threshold(ds.stats.adj.threshold %>% filter(dataset == target_dataset))
+
+children <- c(children, knitr::knit_child( text='### Adjusted Species', quiet=TRUE))
+children <- c(children, knitr::knit_child(
+    text = c(
+      paste("```{r, echo=FALSE, results=\"asis\", warning=FALSE}", sep=''),
+      "print(summary.plot.adj)",
+      "```"
+    ),
+    quiet = TRUE
+))
+
+children <- c(children, knitr::knit_child( text='### Species', quiet=TRUE))
+children <- c(children, knitr::knit_child(
+    text = c(
+      paste("```{r, echo=FALSE, results=\"asis\", warning=FALSE}", sep=''),
+      "print(summary.plot)",
+      "```"
+    ),
+    quiet = TRUE
+))
+
+cat(children, sep='\n')
+```
+
+
+
+
+
+```{r samplewise_fpfn, eval=run_samplewise_fpfn, echo=FALSE, message=FALSE, warning=FALSE, results="asis"}
+children <- c(knitr::knit_child( text='## Sample-wise FP/FN analysis { .tabset }', quiet=TRUE))
+
+for (dataset in unique(data$stats_detailed_merged$Dataset)) {
   children <- c(children, knitr::knit_child( text=c(paste('### ', dataset, ' { .tabset }', sep='')), quiet=TRUE))
-  dataset_df <- ds.detail %>% filter(Dataset == dataset)
+  dataset_df <- data$stats_detailed_merged %>% filter(Dataset == dataset)
   for (tool in unique(dataset_df$Tool)) {
-    tool_df <- dataset_df[dataset_df$Tool == tool,]
+    tool_df <- dataset_df %>% filter(Tool == tool)
     dffilter <- dataset
     tlfilter <- tool
-    
+
     children <- c(children, knitr::knit_child( text=c(paste('#### ', tool, sep='')), quiet=TRUE))
-    children <- c(children, knitr::knit_child( text=c(paste('##### Tables { .tabset .tabset-dropdown }', sep='')), quiet=TRUE))
-    
+    children <- c(children, knitr::knit_child( text=c(paste('##### Tables: { .tabset .tabset-dropdown }', sep='')), quiet=TRUE))
+
     # child <- knitr::knit_child( text=c('###### Rank { .tabset }'), quiet=TRUE)
     # children <- c(children, child)
-    tool_summary_df <- ds %>% filter(dataset == dataset)
-    for (r in rev(unique(ds$rank))) {
+    for (r in rev(unique(data$stats$rank))) {
         children <- c(children, knitr::knit_child( text=c(paste('###### ', r, sep='')), quiet=TRUE))
-        summary_df <- ds %>%
-          filter(dataset == dffilter & tool == tlfilter & rank == r) %>%
+        summary_df <- data$stats %>%
+          filter(dataset == dffilter & tool == tlfilter & rank == r & !is.na(metric)) %>%
           pivot_wider(names_from=metric, values_from=value) %>%
           select (-c(rank)) %>% as.data.frame()
-
-        children <- c(children, knitr::kable(summary_df))
+        children <- c(children, knitr::knit_child(
+          text = c(
+            "```{r, echo=FALSE, results=\"asis\", warning=FALSE}",
+            "datatable(summary_df)",
+            "```"
+          ), quiet=TRUE
+        ))
     }
-
-    #
-    # child <- knitr::knit_child( text=c('###### Plots per Sample { .tabset .tabset-dropdown }'), quiet=TRUE)
-    # children <- c(children, child)
 
     children <- c(children, knitr::knit_child( text=c(paste('##### Plots: { .tabset .tabset-dropdown }', sep='')), quiet=TRUE))
 
@@ -234,52 +606,170 @@ for (dataset in unique(ds.detail$Dataset)) {
 }
 cat(children, sep='\n')
 
-
-# species.df %>% filter(Sample == "MetaPhlAn4 GTDB_oral_16_gold") %>%
-#   pivot_longer(c("GOLD", "PRED"), names_to="Name", values_to="Value") %>%
-#   filter(Value > 0) %>%
-#   ggplot(aes(x=reorder(Taxon,-Value), y=Value, fill=Type)) + geom_bar(stat="identity", position="dodge") +
-#   xlab("Taxon") +
-#   theme(axis.text.x=element_text(angle=45,hjust=1), plot.margin = margin(l = 40))
-#
-#
-# species.df %>% filter(Sample == "MetaPhlAn4 GTDB_oral_16_gold") %>%
-#   pivot_longer(c("GOLD", "PRED"), names_to="Name", values_to="Value") %>%
-#   filter(Value > 0 & (Type == "FP" | Type == "FN")) %>%
-#   ggplot(aes(x=reorder(Taxon,-Value), y=Value, fill=Type)) +
-#   geom_bar(stat="identity", position="dodge") +
-#   xlab("Taxon") +
-#   theme(axis.text.x=element_text(angle=45,hjust=1), plot.margin = margin(l = 40))# + coord_trans(y = "log2")
-#
-# tp.abundances <- species.df %>% filter(Sample == "MetaPhlAn4 GTDB_oral_16_gold") %>%
-#   pivot_longer(c("GOLD", "PRED"), names_to="Name", values_to="Value") %>%
-#   filter(Type == "TP" & Rank == "Species") %>%
-#   ggplot(aes(x=reorder(Taxon,-Value), y=Value, fill=Name)) + geom_bar(stat="identity", position="dodge") +
-#   xlab("Taxon") +
-#   theme(axis.text.x=element_text(angle=45,hjust=1), plot.margin = margin(l = 40))
-# ggplotly(tp.abundances)
-#
-# tp.abundances <- species.df %>% filter(Sample == "protal_oral_16_gold") %>%
-#   pivot_longer(c("GOLD", "PRED"), names_to="Name", values_to="Value") %>%
-#   filter(Type == "TP" & Rank == "Species") %>%
-#   ggplot(aes(x=reorder(Taxon,-Value), y=Value, fill=Name)) + geom_bar(stat="identity", position="dodge") +
-#   xlab("Taxon") +
-#   theme(axis.text.x=element_text(angle=45,hjust=1), plot.margin = margin(l = 40))
-# ggplotly(tp.abundances)
 ```
 
 
 
-## Abundance detection threshold { .tabset }
+<!-- ## Tree-based FP/FN analysis { .tabset } -->
 
-```{r, echo=FALSE, results="asis"}
+```{r treebased, echo=FALSE, results="asis", eval=FALSE}
+trees <- na.omit(unique(meta$GoldStdTree))
+tree_samples <- meta$ID[!is.na(meta$GoldStdTree)]
+tree_tools <- meta$Tool[!is.na(meta$GoldStdTree)]
+
+detail.withtree <- data$stats_detailed %>% filter(Sample %in% tree_samples)
 
 children <- c()
-for (dset in unique(ds.detail$Dataset)) {
-  children <- c(children, knitr::knit_child( text=c(paste('### ', dset, sep='')), quiet=TRUE))
-  dssub <- ds.detail %>% filter(Dataset == dset & Rank == "Species")
-  children <- c(children, knitr::knit_child(input="/usr/users/QIB_fr017/fritsche/Projects/benchpro/knit_abundance_child.Rmd", envir=environment(), quiet = TRUE))
+distances.all <- NULL
+dist.debug <- list()
+for (tree_path in trees) {
+  tree <- load_tree(tree_path)
+
+  tools <- as.character(na.omit(unique(meta$Tool[meta$GoldStdTree == tree_path])))
+  # print(tools)
+
+  for (tool in tools) {
+    children <- c(children, knitr::knit_child( text=c(paste('### ', tool, sep='')), quiet=TRUE))
+
+    detail.df <- detail.withtree %>% filter(Tool == tool & Rank == "Species")
+    # browser()
+    present_species <- unique(detail.df$Taxon)
+    #print(present_species)
+    subtree <- keep.tip(tree, present_species[present_species %in% tree$tip.label])
+    cophen <- cophenetic(subtree)
+    dist.result <- distances(detail.df, cophen)
+    dist.debug[[tool]] <- dist.result
+    tmp.distances <- dist.result$dist
+    tmp.distances$Tool <- tool
+    tmp.distances$closest_distance <- min(tmp.distances$distance_to_fn, tmp.distances$distance_to_tp)
+    tmp.distances$closest_to <- if_else(tmp.distances$distance_to_fn < tmp.distances$distance_to_tp, "FN", "TP")
+
+    if (is.null(nrow(distances.all))) {
+      distances.all <- tmp.distances
+    } else {
+      distances.all <- rbind(distances.all, tmp.distances)
+    }
+    tmp.distances$abundance <- if_else(tmp.distances$GOLD == 0, tmp.distances$PRED, tmp.distances$GOLD)
+    dist.plot <- tmp.distances %>%
+      ggplot(aes(x=distance_to_fn, y=abundance, color=closest_to)) +
+      geom_point() +
+      ggtitle(paste(tool, "- False Positive and closest tree distance in FN and TP")) +
+      scale_x_continuous(trans = scales::pseudo_log_trans(sigma = 0.000001)) +
+      scale_y_continuous(trans = scales::pseudo_log_trans(sigma = 0.000001)) +
+      theme(aspect.ratio=1)
+    children <- c(children, knitr::knit_child( text=c("```{r, echo=FALSE, results=\"asis\"}", "print(dist.plot)", "```"), quiet=TRUE))
+    dist.plot2 <- tmp.distances %>%
+      ggplot(aes(x=distance_to_fn, y=distance_to_tp, color=closest_to)) +
+      geom_point() +
+      ggtitle(paste(tool, "- False Positive and closest tree distance in FN and TP")) +
+      scale_x_continuous(trans = scales::pseudo_log_trans(sigma = 0.000001)) +
+      scale_y_continuous(trans = scales::pseudo_log_trans(sigma = 0.000001)) +
+      theme(aspect.ratio=1)
+    children <- c(children, knitr::knit_child( text=c("```{r, echo=FALSE, results=\"asis\"}", "print(dist.plot2)", "```"), quiet=TRUE))
+  }
 }
+
+cat(children, sep='\n')
+```
+
+
+
+
+```{r abundance_detection_threshold, echo=FALSE, results="asis", eval=TRUE}
+
+
+newdet.plot.tp <- data$stats_detailed_new %>%
+  filter(Type == "TP" & Rank == "Species" ) %>%
+  group_by(Tool) %>%
+  mutate(idx = as.integer(with_order(order_by = GOLD, fun = row_number, x = GOLD))) %>%
+  filter(idx <= 10) %>%
+  mutate(GOLD = GOLD*100) %>%
+  ggplot(aes(x=idx, y=GOLD, color=Tool, group=Tool)) +
+  geom_line() +
+  ggtitle("True positive detection threshold (Species Adj)") +
+  ylab("% Relative Abundance") +
+  xlab("False Negatives sorted ascending") +
+  scale_y_log10() +
+  scale_x_continuous(breaks= pretty_breaks())
+
+
+newdet.plot.fn <- data$stats_detailed_new %>%
+  filter(Type == "FN" & Rank == "Species") %>%
+  group_by(Tool, Detectable) %>%
+  mutate(idx = with_order(order_by = -GOLD, fun = row_number, x = -GOLD)) %>%
+  filter(idx <= 10) %>%
+  mutate(GOLD = GOLD*100) %>%
+  filter(idx < 10) %>%
+  ggplot(aes(x=idx, y=GOLD, color=Tool, group=Tool)) +
+  geom_line() +
+  ggtitle("False negative detection threshold (Species Adj)") +
+  ylab("% Relative Abundance") +
+  xlab("False Negatives sorted descending") +
+  facet_grid(rows=vars(Detectable)) +
+  scale_x_continuous(breaks=pretty_breaks())
+
+newdet.plot.fn.unadj <- data$stats_detailed %>%
+  filter(Type == "FN" & Rank == "Species") %>%
+  group_by(Tool) %>%
+  mutate(idx = with_order(order_by = -GOLD, fun = row_number, x = -GOLD)) %>%
+  filter(idx <= 10) %>%
+  mutate(GOLD = GOLD*100) %>%
+  ggplot(aes(x=idx, y=GOLD, color=Tool, group=Tool)) +
+  geom_line() +
+  ggtitle("False negative detection threshold (Species)") +
+  ylab("% Relative Abundance") +
+  xlab("False Negatives sorted descending") +
+  scale_x_continuous(breaks= pretty_breaks())
+
+newdet.plot.tp.unadj <- data$stats_detailed %>%
+  filter(Type == "TP" & Rank == "Species" ) %>%
+  group_by(Tool) %>%
+  mutate(idx = as.integer(with_order(order_by = GOLD, fun = row_number, x = GOLD))) %>%
+  filter(idx <= 10) %>%
+  filter(idx <= 10) %>%
+  mutate(GOLD = GOLD*100) %>%
+  ggplot(aes(x=idx, y=GOLD, color=Tool, group=Tool)) +
+  geom_line() +
+  ggtitle("True positive detection threshold (Species)") +
+  xlab("False Negatives sorted ascending") +
+  ylab("% Relative Abundance") +
+  scale_x_continuous(breaks= pretty_breaks())
+
+
+if (!is.null(data$tool_colors)) {
+  newdet.plot.tp <- newdet.plot.tp + 
+    scale_color_manual(values = data$tool_colors)
+  newdet.plot.fn <- newdet.plot.fn + 
+    scale_color_manual(values = data$tool_colors)
+  newdet.plot.fn.unadj <- newdet.plot.fn.unadj + 
+    scale_color_manual(values = data$tool_colors)
+  newdet.plot.tp.unadj <- newdet.plot.tp.unadj + 
+    scale_color_manual(values = data$tool_colors)
+}
+
+children <- c()
+children <- c(knitr::knit_child( text='## Abundance detection threshold { .tabset }', quiet=TRUE))
+children <- c(children, knitr::knit_child( text='### Adjusted Species', quiet=TRUE))
+children <- c(children, knitr::knit_child(
+    text = c(
+      paste("```{r, echo=FALSE, results=\"asis\", warning=FALSE}", sep=''),
+      "print(newdet.plot.tp)",
+      "print(newdet.plot.fn)",
+      "```"
+    ),
+    quiet = TRUE
+))
+children <- c(children, knitr::knit_child( text='### Unadjusted Species', quiet=TRUE))
+children <- c(children, knitr::knit_child(
+    text = c(
+      paste("```{r, echo=FALSE, results=\"asis\", warning=FALSE}", sep=''),
+      "print(newdet.plot.tp.unadj)",
+      "print(newdet.plot.fn.unadj)",
+      "```"
+    ),
+    quiet = TRUE
+))
+
 cat(children, sep='\n')
 ```
 
@@ -287,7 +777,7 @@ cat(children, sep='\n')
 
 ## Alpha diversity detection threshold { .tabset }
 
-```{r, echo=FALSE, results="asis"}
+```{r, echo=FALSE, results="asis", eval=FALSE}
 
 target_stats <- c("ShannonDiversity", "ShannonDiversityGold", "ShannonDiversityDiff",
                   "ShannonDiversityTP", "ShannonDiversityGoldTP", "ShannonDiversityDiffTP",
@@ -296,11 +786,17 @@ target_stats <- c("ShannonDiversity", "ShannonDiversityGold", "ShannonDiversityD
 #ds %>% filter(rank == r & metric %in% target_stats)
 
 children <- c()
-for (r in unique(ds$rank)) {
+for (r in rev(unique(data$stats$rank))) {
   children <- c(children, knitr::knit_child( text=c(paste('### ', r, sep='')), quiet=TRUE))
-  dssub <- ds %>% filter(rank == r & metric %in% target_stats)
+  dssub <- data$stats %>% filter(rank == r & metric %in% target_stats)
   dssub$metric <- ordered(dssub$metric, levels=target_stats)
   children <- c(children, knitr::knit_child(input="/usr/users/QIB_fr017/fritsche/Projects/benchpro/knit_alpha_diversity_child.Rmd", envir=environment(), quiet = TRUE))
 }
 cat(children, sep='\n')
 ```
+
+# {-}
+```{r, echo=FALSE, results="asis", fig.width=12, fig.height=12, warning=FALSE}
+plot.new()
+```
+
