@@ -30,6 +30,8 @@ library(plotly)
 library(reshape2)
 library(phangorn)
 library(cowplot)
+library(ggpubr)
+library(ggExtra)
 # library(tidyverse)
 ```
 
@@ -53,7 +55,7 @@ map.file <- "/usr/users/QIB_fr017/fritsche/Projects/benchpro/data/SPECIES46/MSSS
 map.file <- "/usr/users/QIB_fr017/fritsche/Projects/benchpro/data/SPECIES46/MSSS200C/map4.csv"
 # map.file <- "/usr/users/QIB_fr017/fritsche/Projects/benchpro/data/SPECIES46/MSSS200C/map4_test.csv"
 
-map <- load_map(map.file)
+map <- load_map(map.file) %>% filter(Tool %in% c("StrainPhlan4", "gold_std"))
 meta.dict <- get_meta_dict(map)
 
 # If gold standards do not exist
@@ -64,7 +66,7 @@ tree_dict_shared_tips <- get_tree_dict_shared_tips(map, tree.dict)
 shared_species <- species_for_tools(map)
 
 
-data <- load_all(map.file)
+data <- load_all(map)
 ```
 
 
@@ -81,9 +83,6 @@ data <- load_all(map.file)
     <img width="50%" height="50%" style="margin: 10px" src="images/monophyly.png"/>
 </details>
 <br>
-
-
-
 
 # Analysis {.tabset}
 
@@ -124,10 +123,37 @@ if (length(data$tree.dict.shared.tips) > 0) {
 
 # Set up monophyly dataframe
 monophyly.df <- monophylies(data$tree.dict, data$map, data$meta.dict, META_GROUP_COL) %>% left_join(data$map, by=MAP_NAME_COL) %>% rm_duplicate_suffix()
+monophyly.df$Species <- unlist(lapply(monophyly.df$Species, abbrev_species))
+# monophyly.df <- rbind(
+#   monophyly.df %>% filter(Tool != GOLD_STD_TOOL),
+#   monophyly.df %>% filter(Tool != GOLD_STD_TOOL) %>%
+#     mutate(Species = "Summary")
+# )
+
+all.meta <- bind_rows(data$meta.dict, .id = "column_label")
+all.meta %>% group_by(genome, species) %>%
+  summarise(samples = n())
 
 mono.plot.all <- monophyly.df %>%
-  filter(Tool != GOLD_STD_TOOL) %>% 
-  plot_monophyly(title="Monophyly")
+  filter(Tool != GOLD_STD_TOOL) %>%
+  plot_monophyly(title="Monophyly") +
+  theme(legend.position="bottom",
+        axis.title.y=element_blank(),
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+mono.plot.summary <- monophyly.df %>%
+  filter(Tool != GOLD_STD_TOOL) %>%
+  mutate(Species = "Summary") %>%
+  plot_monophyly(title="") +
+  theme(legend.position="None",
+        axis.title.y=element_blank(),
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+mono.plot.combined <- plot_grid(mono.plot.all, mono.plot.summary, rel_widths = c(0.85,0.15))
+
+
 mono.plot.summary <- monophyly.df %>%
   filter(Tool != GOLD_STD_TOOL) %>% 
   plot_monophyly_summary(title="Monophyly")
@@ -135,18 +161,92 @@ mono.plot.sharedsp.summary <- monophyly.df %>%
   filter(Tool != GOLD_STD_TOOL & Species %in% data$shared_species) %>%
   plot_monophyly_summary(title="Monophyly on shared species")
 
+
 print(mono.plot.all)
 print(mono.plot.summary)
 print(mono.plot.sharedsp.summary)
+
+n_perfect <- monophyly.df %>% filter(Value==1 & Tool == "StrainPhLAn4") %>% count()
+n_imperfect <- monophyly.df %>% filter(Value!=1 & Tool == "StrainPhLAn4") %>% count()
+paste("Resolved species at monophyly 1: ", n_perfect/nrow(monophyly.df))
+n_perfect_strains <- monophyly.df %>% filter(Value==1 & Tool == "StrainPhLAn4") %>% pull(GroupSize) %>% as.numeric() %>% sum()
+n_imperfect_strains <- monophyly.df %>% filter(Value!=1 & Tool == "StrainPhLAn4") %>% pull(GroupSize) %>% as.numeric() %>% sum()
+paste("Resolved strains at monophyly 1: ", n_perfect_strains/sum(monophyly.df %>%pull(GroupSize) %>% as.numeric()))
+
+monophyly_summary <- monophyly.df %>% group_by(Tool) %>%
+  summarise(total = n(), total_samples=sum(GroupSize), perfect = sum(Value == 1), perfect_samples = sum(GroupSize[Value == 1])) %>%
+  mutate(perfect_rate=perfect/total, perfect_sample_rate=perfect_samples/total)
+
+monophyly_species_summary_tool <- monophyly.df %>% 
+  filter(Tool != GOLD_STD_TOOL) %>%
+  group_by(Tool, Species) %>%
+  summarise(n = n(), n_samples=sum(GroupSize), perfect = sum(Value == 1), perfect_samples = sum(GroupSize[Value == 1])) %>%
+  mutate(perfect_rate=perfect/n, perfect_sample_rate=perfect_samples/n_samples)
+# monophyly_species_summary_gold <- monophyly.df %>% 
+#   filter(Tool == GOLD_STD_TOOL) %>%
+#   group_by(Species) %>%
+#   summarise(n_gold = n(), n_samples_gold=sum(GroupSize))
+
+monophyly_species_summary_gold <- all.meta %>% group_by(species) %>%
+  summarise(n_samples_gold=n(), n_gold=length(unique(genome)), mean_coverage=mean(coverage)) %>%
+  mutate(Species=gsub(" ", "_", species))
+
+monophyly_strain_summary_gold <- all.meta %>% group_by(species, genome) %>%
+  summarise(group_size=n())
+
+
+monophyly_species_summary_tool <- monophyly_species_summary_tool %>%
+  left_join(monophyly_species_summary_gold, by="Species") %>%
+  mutate(sensitivity=n/n_gold, sensitivity_sample=n_samples/n_samples_gold)
+
+mean_sd(monophyly_species_summary_tool$sensitivity)
+
+sensitivity.plot <- monophyly_species_summary_tool %>%
+  ggplot(aes(x=sensitivity, y=sensitivity_sample, color=Tool, fill=Tool)) +
+  geom_point() + 
+  theme(legend.position="bottom") +
+  xlab("Strain sensitivity") +
+  ylab("Sample sensitivity") +
+  xlim(c(0,1)) + ylim(c(0,0.5))
+ggMarginal(sensitivity.plot, type="boxplot", size=16, groupFill=TRUE)
+
+mean_sd <- function(x, digits=2) {
+  paste(round(mean(x), digits), round(sd(x), digits), sep="±")
+}
+
+group_sizes <- monophyly.df %>% 
+  filter(Tool == GOLD_STD_TOOL) %>% pull(GroupSize)
+length(group_sizes)
+group_sizes %>% mean_sd()
+
+
+
+per_species_sample <- monophyly_species_summary_tool %>%
+  ggplot(aes(x=sensitivity_sample, y=perfect_sample_rate)) +
+  geom_point() +
+  geom_smooth(method="lm") +
+  stat_cor(method="pearson") +
+  ggtitle("Per species sample statistics") +
+  xlab("Sample sensitivity") +
+  ylab("Percent of samples with perfect Monophyly")
+per_species_strain <-monophyly_species_summary_tool %>%
+  ggplot(aes(x=sensitivity, y=perfect_rate)) +
+  geom_point() +
+  geom_smooth(method="lm") +
+  stat_cor(method="pearson") +
+  ggtitle("Per species strain statistics") +
+  xlab("Sample sensitivity") +
+  ylab("Percent of strains with perfect Monophyly")
+plot <- plot_grid(per_species_sample, per_species_strain)
+
+
+total_taxa <- sum(as.numeric(monophyly.df$GroupSize))
+
+monophyly.df
 ```
 
-<details>
-  <summary>How monophyly is assessed?</summary>
-  ### Monophyly
-  A monophyletic
-</details>
 
-```{r, echo=FALSE, warnings=FALSE, message=FALSE, eval=TRUE}
+```{r, echo=FALSE, warnings=FALSE, message=FALSE, eval=FALSE}
 print(mono.plot.sharedsp.summary)
 ```
 

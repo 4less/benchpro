@@ -7,6 +7,7 @@ from loguru import logger
 from collections import namedtuple
 from skbio.diversity import alpha
 import numpy as np
+from scipy.spatial.distance import braycurtis 
 
 
 class AbundanceStatistics:
@@ -48,14 +49,13 @@ def get_abundance_dict(profile, rank):
 def bray_curtis(a, b):
     total_a = sum(a)
     total_b = sum(b)
-    shared_a = sum(va for va, vb in zip(a, b) if va > 0 and vb > 0)
-    shared_b = sum(vb for va, vb in zip(a, b) if va > 0 and vb > 0)
+    shared_min = sum(min(va, vb) for va, vb in zip(a, b) if va > 0 and vb > 0)
 
     if (total_a + total_b) == 0:
         logger.warning("No overlap between gold and predicition")
         return 0
 
-    bc = (2*min(shared_a, shared_b) / (total_a + total_b))
+    bc = ((2*shared_min) / (total_a + total_b))
 
     return bc
 
@@ -188,6 +188,9 @@ def get_rank_statistics(gold_profile: Profile, prediction_profile: Profile,
             print(rank)
             print(sum(prediction_dict.values()))
             print("Prediction profile")
+            print(prediction_profile.name)
+            print('\n'.join([row.ToString() for row in prediction_profile.Rows()]))
+            print(prediction_dict)
             input()
 
         gold_vec = list(gold_dict.values())
@@ -235,10 +238,11 @@ def get_rank_statistics(gold_profile: Profile, prediction_profile: Profile,
         # print(gold_vec_shared)
         # print(pred_vec_shared)
 
-        abundance.bray_curtis_intersection = bray_curtis(gold_vec_shared, pred_vec_shared)
-        abundance.bray_curtis = bray_curtis(gold_vec_union, pred_vec_union)
+        abundance.bray_curtis_intersection = braycurtis(gold_vec_shared, pred_vec_shared)
+        abundance.bray_curtis = braycurtis(gold_vec_union, pred_vec_union)
 
         logger.info("Bray-Curtis Shared {} Union {}".format(abundance.bray_curtis_intersection, abundance.bray_curtis))
+
 
         ##########################################################################################
         # Euclidean (L2)
@@ -315,22 +319,22 @@ def print_abundance_stats(stats_dict, tool: str = '', dataset: str = '', sep: st
 
         extra_metadata = None
 
-        file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'PearsonCorrelationIntersect',
+        file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'PearsonCorrelation-TP', 
                                                   stats.pearson_correlation_intersection, '\t' + extra_metadata if extra_metadata else ""))
-        file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'PearsonCorrelationUnion',
+        file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'PearsonCorrelation', 
                                                               stats.pearson_correlation_union, '\t' + extra_metadata if extra_metadata else ""))
-        file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'SpearmanCorrelationIntersect',
+        file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'SpearmanCorrelation-TP', 
                                                               stats.spearman_correlation_intersection, '\t' + extra_metadata if extra_metadata else ""))
-        file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'SpearmanCorrelationUnion',
+        file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'SpearmanCorrelation', 
                                                               stats.spearman_correlation_union, '\t' + extra_metadata if extra_metadata else ""))
-        file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'BrayCurtisIntersect',
+        file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'BrayCurtisIntersect', 
                                                               stats.bray_curtis_intersection, '\t' + extra_metadata if extra_metadata else ""))
-        file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'Bray-Curtis similarity',
+        file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'Bray-Curtis similarity', 
                                                               stats.bray_curtis, '\t' + extra_metadata if extra_metadata else ""))
-        file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'L2Intersect',
-                                                              stats.l2_intersection, '\t' + extra_metadata if extra_metadata else ""))
-        file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'L2Union',
-                                                              stats.l2_union, '\t' + extra_metadata if extra_metadata else ""))
+        file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'L2-TP', 
+                                                              1 - stats.l2_intersection, '\t' + extra_metadata if extra_metadata else ""))
+        file_handle.write('{}\t{}\t{}\t{}\t{}\t{}{}\n'.format(sample, dataset, tool, rank.value.name, 'L2',
+                                                              1 - stats.l2_union, '\t' + extra_metadata if extra_metadata else ""))
 
 
 def print_misc_stats(stats_dict, tool: str = '', dataset: str = '', sep: str = '\t', file_handle=sys.stdout, extra_metadata=None):

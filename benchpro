@@ -9,6 +9,8 @@ from src.external_tools import *
 from loguru import logger
 import os
 
+from src.tree_utils import load_tree_dict
+
 def from_metafile(opts):
 
     meta = opts.meta
@@ -26,7 +28,7 @@ def from_metafile(opts):
     profile_names = []
 
     md = opts.meta.to_meta_dict()
-
+    # tree_dict = load_tree_dict(md)
 
     for row in meta.workbook.active:
         if skip:
@@ -69,6 +71,17 @@ def from_metafile(opts):
             lineage_column=profile_columns['lineage'],
             abundance_column=profile_columns['abundance'],
             rank_column=profile_columns['rank'])
+
+        # tree_path = rd["GoldStdTree"]
+
+        # if tree_path is not None and tree_path != 'NA':
+        #     tree = tree_dict[tree_path]
+        #     print(tree_path)
+        #     print([label for label in tree.labels()])
+        #     subset_tree(tree, prediction, gold_std)
+        #     input()
+
+
         
         # for row in prediction.Rows():
         #     print(row.HasRank(Rank.DOMAIN))
@@ -106,7 +119,6 @@ def from_metafile(opts):
 
     if workbook_logger:
         workbook_logger.save()
-        workbook_logger.print_xsv()
         print("Saved workbook to: {}".format(workbook_logger.output_path))
 
 
@@ -191,5 +203,5 @@ def main_script():
 
 if __name__ == '__main__':
     logger.remove() #remove the old handler. Else, the old one will work (and continue printing DEBUG logs) along with the new handler added below'
-    logger.add(sys.stdout, level="WARNING")
+    # logger.add(sys.stdout, level="WARNING")
     main_script()

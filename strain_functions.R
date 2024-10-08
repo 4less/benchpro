@@ -212,8 +212,8 @@ get_tree_dict_gold <- function(map, midpoint.root=TRUE) {
 
 
 
-load_all <- function(map.file) {
-  map <- load_map(map.file)
+load_all <- function(map) {
+  # map <- load_map(map.file)
   data <- load_all_map(map)
   return(data)
 }
@@ -387,7 +387,6 @@ prune_tree <- function(tree, meta) {
       new.tree$tip.label[new.tree$tip.label == samples[1]] <- group
     }
   }
-  data.frame(tree6$edge)
   new.tree <- drop.tip(new.tree, tree$tip.label)
   return(new.tree)
 }
@@ -573,6 +572,7 @@ monophylies <- function(trees, map, meta.dict, group_name) {
     }
   }
   df$Value <- as.numeric(df$Value)
+  df$GroupSize <- as.numeric(df$GroupSize)
   return(df)
 }
 
@@ -713,6 +713,14 @@ comsub<-function(x) {
   ifelse(der_com==0,return(character(0)),return(substr(x[1],1,der_com)))
 }
 
+
+abbrev_species <- function(x) {
+  spl <- unlist(str_split(gsub("s__", "", x), "_", 2))
+  spl[1] <- substring(spl[1], 1, 1)
+  spl[2] <- gsub("_", " ", spl[2])
+  paste(spl, collapse=". ")
+}
+
 plot_tree_meta <- function(res, plot_group_size=TRUE, condense_labels=FALSE) {
   res$meta$tlab <- res$meta$genome
   if (condense_labels) {
@@ -812,6 +820,7 @@ sliding_window_possible <- function(df, window_size=30) {
 
 
 sliding_window_monophyly <- function(df, window_size=30, theme=NULL) {
+  browser()
   tool_list <- unique(df$Tool)
   closest.df <- df %>% mutate(sim=rank(maxsim))
   result.df <- NULL
@@ -823,7 +832,14 @@ sliding_window_monophyly <- function(df, window_size=30, theme=NULL) {
     
     tool.df$sliding_window <- c(rep(NA, window_size/2), unlist(lapply(seq(nrow(tool.df)-window_size), FUN=function(i) {
       # Return the mean over a window
-      return(mean(tool.df$Value[i:(i+window_size)]))
+      start <- i
+      end <- i + window_size
+      start_maxsim <- tool.df[start, "maxsim"]
+      end_maxsim <- tool.df[end, "maxsim"]
+      window_mean <- mean(tool.df$Value[i:(i+window_size)])
+      window_median <- mean(tool.df$Value[i:(i+window_size)])
+      
+      return(c(start, end, start_maxsim, end_maxsim, window_mean, ))
     })), rep(NA, window_size/2))
     
     if (all(is.na(result.df))) {

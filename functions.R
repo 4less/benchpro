@@ -19,7 +19,14 @@ ALL_DATASET <- "All"
 
 RANKS <- c("Domain", "Phylum", "Class", "Order", "Family", "Genus", "Species", "Species Adj", "Strain")
 RANKS_SP <- c("Domain", "Phylum", "Class", "Order", "Family", "Genus", "Species")
-METRICS <- c("F1", "Sensitivity", "Precision", "TP", "TN", "FP", "FN", "PearsonCorrelationIntersect", "PearsonCorrelationUnion", "BrayCurtisIntersect", "BrayCurtisUnion", "Bray-Curtis Dissimilarity", "L2Intersect", "L2Union", "ShannonDiversity", "ShannonDiversityGold", "ShannonDiversityDiff")
+# METRICS <- c("F1", "Sensitivity", "Precision", "TP", "TN", "FP", "FN", "FFP", "PearsonCorrelationIntersect",
+#              "PearsonCorrelationUnion", "BrayCurtisIntersect", "BrayCurtisUnion", "Bray-Curtis Dissimilarity", 
+#              "L2Intersect", "L2Union", "ShannonDiversity", "ShannonDiversityGold", "ShannonDiversityDiff")
+METRICS <- c("F1", "Sensitivity", "Precision", "TP", "TN", "FP", "FN", 
+             "PearsonCorrelation-TP", "PearsonCorrelation","SpearmanCorrelation-TP", "SpearmanCorrelation", 
+             "Bray-Curtis similarity", "BrayCurtisIntersect", "BrayCurtis", "Bray-Curtis Dissimilarity", 
+             "L2-TP", "L2", "ShannonDiversity", "ShannonDiversityGold", "ShannonDiversityDiff",
+             "ShannonDiversityTP", "ShannonDiversityGoldTP", "ShannonDiversityDiffTP", "RichnessTP", "RichnessGoldTP", "RichnessTPDiff")
 
 pairs <- c( "#a6cee3", "#1f78b4",
             "#fb9a99", "#e31a1c",
@@ -32,6 +39,28 @@ pairs <- c( "#a6cee3", "#1f78b4",
 
 color_palette_paired <- function(pair) {
   
+}
+
+mean_sd_label <- function(ls, digits=3) {
+  paste(round(mean(ls), digits), "±", round(sd(ls), digits), sep='')
+  #paste(round(mean(ls), digits), "±", sd(ls), sep='')
+}
+
+harmonic_mean_list <- function(...) {
+  arguments <- list(...)
+  print(arguments)
+  # arguments <- as.list(substitute(list(...)))[-1L]
+  denominator <- sum(unlist(lapply(arguments, function(x) { 1/x })))
+  result <- length(arguments) / denominator
+  return(result)
+}
+
+harmonic_mean_vector <- function(vec) {
+  arguments <- vec
+  # arguments <- as.list(substitute(list(...)))[-1L]
+  denominator <- sum(unlist(lapply(arguments, function(x) { 1/x })))
+  result <- length(arguments) / denominator
+  return(result)
 }
 
 read_table <- function(path) {
@@ -106,17 +135,33 @@ load_data <- function(meta_path, stats_path, stats_detailed_path, tool_color_pat
 }
 
 generate_data <- function(data) {
+  data$stats_detailed$Detectable <- TRUE
+  for (tool in data$stats_detailed %>% filter(Tool %in% names(data$spdict)) %>% pull(Tool) %>% unique()) {
+    spd <- data$spdict[[tool]]
+    data$stats_detailed$Detectable[data$stats_detailed$Tool == tool & data$stats_detailed$Rank == "Species"] <- data$stats_detailed$Taxon[data$stats_detailed$Tool == tool & data$stats_detailed$Rank == "Species"] %in% spd
+  }
+  valid_taxa <- grepl("^((d|p|o|c|f|g)__[a-zA-Z0-9_-]+)|(s__[a-zA-Z0-9_-]+ [a-zA-Z0-9_-]+)$|^[0-9]+$", data$stats_detailed$Taxon)
+  data$stats_detailed$Type[!valid_taxa & data$stats_detailed$Type == "FP"] <- "Unknown"
+  
   new_details <- adjust_gtdb_performance(data$meta, data$stats_detailed, data$stats, 0.04, data$spdict)
   
   if (!is.null(new_details)) {
-    new_stats <- details_to_binary_stats(new_details, data$stats)
-    all_stats <-  rbind(
-      new_stats %>% mutate(adjusted=TRUE, rank="Species Adj"),
-      data$stats %>% mutate(adjusted=FALSE)
+    new_stats <- details_to_binary_stats(new_details, data$stats %>% filter(dataset != ALL_DATASET)) %>% mutate(adjusted=TRUE, Rank="Species Adj")
+    old_stats <- details_to_binary_stats(data$stats_detailed, data$stats %>% filter(dataset != ALL_DATASET)) %>% mutate(adjusted=FALSE)
+    abundance_stats <- data$stats %>% filter(!metric %in% (old_stats$metric %>% unique()) & !is.na(metric) & dataset != ALL_DATASET) %>% mutate(adjusted=FALSE)
+    colnames(new_stats)[colnames(new_stats) == "Rank"] <- "rank"
+    colnames(old_stats)[colnames(old_stats) == "Rank"] <- "rank"
+    
+    all_stats <-rbind(
+      new_stats,
+      old_stats,
+      abundance_stats
     )
     merged_details <- rbind(
-      data$stats_detailed %>% filter(!Tool %in% unique(new_details$Tool)) %>% mutate(Dist=NA, Detectable=NA),
-      new_details %>% select(c(colnames(data$stats_detailed), "Dist", "Detectable"))
+      data$stats_detailed %>% filter(!Tool %in% unique(new_details$Tool)) %>% 
+        mutate(Dist=NA, Detectable=NA),
+      new_details %>% select(c(colnames(data$stats_detailed), "Dist", "Detectable")) %>%
+        mutate(Rank="Species Adj")
     )
   } else {
     all_stats <- data$stats %>% mutate(adjusted=FALSE)
@@ -126,10 +171,13 @@ generate_data <- function(data) {
   merged_details$Rank <- ordered(merged_details$Rank, levels=RANKS)
   new_details$Rank <- ordered(new_details$Rank, levels=RANKS)
   all_stats$tool <- ordered(all_stats$tool, levels=data$tool_order)
+  all_stats$metric <- ordered(all_stats$metric, levels=METRICS)
   
   data$stats_detailed_merged <- merged_details
   data$stats_detailed_new <- new_details
   data$stats_all <- all_stats
+  
+  
   
   if (is.null(data$tool_order)) {
     data$stats_all$tool <- factor(data$stats_all$tool)
@@ -140,13 +188,23 @@ generate_data <- function(data) {
     data$stats_detailed_new$Tool <- ordered(data$stats_detailed_new$Tool, levels=data$tool_order)
     data$stats_detailed_merged$Tool <- ordered(data$stats_detailed_merged$Tool, levels=data$tool_order)
   }
-  data$fp_neighbors <- explore_fp_neighborhood(data$meta, data$stats_detailed_new) %>% 
-    left_join(data$meta %>% select(ID, Dataset), by=join_by(Sample == ID))
+  
+  print("explore fp neighborhood")
+  data$fp_neighbors <- NULL
+  fp_neighbors <- explore_fp_neighborhood(data$meta, data$stats_detailed_new)
+  if (nrow(fp_neighbors) > 0) {
+    data$fp_neighbors <- fp_neighbors %>%
+      left_join(data$meta %>% select(ID, Dataset), by=join_by(Sample == ID))
+  }
   
   if (length(unique(data$fp_neighbors$Dataset)) > 1) {
     data$fp_neighbors <- rbind(
       data$fp_neighbors,
       data$fp_neighbors %>% mutate(Dataset = ALL_DATASET)
+    )
+    data$stats_all <- rbind(
+      data$stats_all,
+      data$stats_all %>% mutate(dataset = ALL_DATASET)
     )
   }
   
@@ -178,10 +236,15 @@ load_tool_ordered <- function(path) {
   color.df %>% arrange(Order) %>% pull(Tool)
 }
 
-prediction_colors <- list(
+prediction_colors_list <- list(
   TP="#003200",
   FP="#FF3030",
   FN="#FF9F00")
+prediction_colors_vec <- c(
+  "TP"="#003200",
+  "FP"="#FF3030",
+  "FN"="#FF9F00"
+)
 
 knit_plot_text <- function(p, width, height) {
   return(c(paste("```{r, echo=FALSE, results=\"asis\", fig.width=", width, ", fig.height=", height, ", warning=FALSE}", sep=''),
@@ -206,9 +269,10 @@ plot.tree.abundance <- function(subtree, detail.df, available_species=NULL) {
   }
   
   detail.df$Type <- ordered(detail.df$Type, levels=c("TP", "FP", "FN"))
-  tree.plot <- ggtree(subtree, layout="circular")  %<+% (detail.df %>% mutate(ID=Taxon, Identity=Type, Abundance=abundance, InDatabase=InDatabase) %>% select(ID, Identity, Abundance, InDatabase)) + 
+  tree.plot <- ggtree(subtree, layout="circular")  %<+% 
+    (detail.df %>% mutate(ID=Taxon, Identity=Type, Abundance=round(abundance, 4), InDatabase=InDatabase) %>% select(ID, Identity, Abundance, InDatabase)) + 
     geom_tippoint(aes(color=Identity, shape=InDatabase), size=2) +
-    scale_color_manual(values=sapply(unique(detail.df$Type), function(x) prediction_colors[[x]]))
+    scale_color_manual(values=prediction_colors_list)#sapply(unique(detail.df$Type), function(x) prediction_colors[[x]])
   
     
   detailplot2 <- tree.plot +
@@ -312,6 +376,7 @@ evaluate_fp_fn <- function(sample.df, tree, dist_threshold, detectable_species=N
     summarize(best_fp = fp[which.min(dist)], min_fp = min(dist)) %>% arrange(min_fp)
   used_fp <- c()
   
+  
   for (fn_tax in subtree_pairs$fn) {
     sample.df$Detectable[sample.df$Taxon == fn_tax] <- fn_tax %in% detectable_species
     by_fp_list <- subtree_pairs %>% filter(fn == fn_tax & !(best_fp %in% used_fp))
@@ -391,8 +456,11 @@ adjust_gtdb_performance <- function(meta, ds.detail, ds.all, dist_threshold, ava
     test.fn <- test.df %>% filter(Type == "FN")
     
     tool <- test.df$Tool[1]
-    available_species <- available_species_dict[[tool]]
-    test.df$Detectable <- test.df$Taxon %in% available_species
+    available_species <- available_species_dict[[as.character(tool)]] 
+    # Important to use as.character. Indexing with factors will use integer and retrieve the wrong value
+    # test.df$Detectable <- test.df$Taxon %in% available_species
+    
+    test.df$Type[test.df$Type == "FP" & !(startsWith(test.df$Taxon, "s__") | test.df$Taxon == "s__")] <- "TN"
     
     if (nrow(test.fp) == 0 | nrow(test.fn) == 0) {
       test.df$Dist <- 0
@@ -403,12 +471,12 @@ adjust_gtdb_performance <- function(meta, ds.detail, ds.all, dist_threshold, ava
     tree <- ape::read.tree(test.df$GoldStdTree[1])
     tree$tip.label <- gsub("'", "", tree$tip.label)
     
-    
-    print(sample)
     shared_taxa <- intersect(test.df$Taxon, tree$tip.label)
     subtree <- ape::keep.tip(tree, shared_taxa)
+    
     return(evaluate_fp_fn(test.df, subtree, dist_threshold, available_species))
   }) %>% bind_rows()
+  
   
   return(new.details)
 }
@@ -442,30 +510,73 @@ explore_fp_neighborhood <- function(meta, ds.detail) {
   new.details <- lapply(samples, FUN = function(sample) {
     sample.df <- ds.detail %>% filter(Sample == sample)
     sample.fp <- sample.df %>% filter(Type == "FP")
+    sample.fn <- sample.df %>% filter(Type == "FN")
     sample.tp <- sample.df %>% filter(Type == "TP")
     
     tool <- sample.df$Tool[1]
     
-    if (nrow(sample.fp) == 0 | nrow(sample.tp) == 0) {
+    if (nrow(sample.fp) == 0 | (nrow(sample.tp) == 0 & nrow(sample.fn) == 0)) {
       return(NULL)
     }
     
     tree <- ape::read.tree(sample.df$GoldStdTree[1])
     tree$tip.label <- gsub("'", "", tree$tip.label)
     
-    print(sample)
+    # print(sample)
     shared_taxa <- intersect(sample.df$Taxon, tree$tip.label)
     subtree <- ape::keep.tip(tree, shared_taxa)
     
+    num_fp <- sample.fp %>% pull(Taxon) %>% intersect(shared_taxa) %>% length()
     if (length(sample.fp %>% pull(Taxon) %>% intersect(shared_taxa)) == 0) {
       return(NULL)
     }
+    shared_fp <- sample.fp %>% pull(Taxon) %>% intersect(shared_taxa)
+    shared_fn <- sample.fn %>% pull(Taxon) %>% intersect(shared_taxa)
+    shared_tp <- sample.tp %>% pull(Taxon) %>% intersect(shared_taxa)
+    # Analyze FP and FN
+    fn_df <- NULL
+    tp_df <- NULL
     
-    subtree.cophen <- ape::cophenetic.phylo(subtree)[sample.fp %>% pull(Taxon) %>% intersect(shared_taxa), sample.tp %>% pull(Taxon) %>% intersect(shared_taxa), drop=F]
-    pairs <- data.frame(tp=colnames(subtree.cophen)[col(subtree.cophen)], fp=rownames(subtree.cophen)[row(subtree.cophen)], dist=c(subtree.cophen)) %>%
+    if (length(shared_fn) > 0) {
+      subtree.cophen.fn <- ape::cophenetic.phylo(subtree)[shared_fp, shared_fn, drop=F]
+      fn_df <- data.frame(neighbor=colnames(subtree.cophen.fn)[col(subtree.cophen.fn)], 
+                          fp=rownames(subtree.cophen.fn)[row(subtree.cophen.fn)],
+                          type="FN",
+                          dist=c(subtree.cophen.fn))
+    }
+    if (length(shared_tp) > 0) {
+      subtree.cophen.tp <- ape::cophenetic.phylo(subtree)[shared_fp, shared_tp, drop=F]
+      tp_df <- data.frame(neighbor=colnames(subtree.cophen.tp)[col(subtree.cophen.tp)], 
+                          fp=rownames(subtree.cophen.tp)[row(subtree.cophen.tp)],
+                          type="TP",
+                          dist=c(subtree.cophen.tp))
+    }
+  
+    pairs <- rbind(fn_df, tp_df) %>%
       group_by(fp) %>% 
-      summarize(best_tp = tp[which.min(dist)], min_tp = min(dist)) %>% arrange(min_tp) %>%
-      left_join(sample.tp %>% select(Taxon, GOLD, Sample, Tool), by=join_by(best_tp == Taxon)) 
+      summarize(closest_neighbor = neighbor[which.min(dist)], distance = min(dist), type=type[which.min(dist)]) %>% 
+      arrange(distance) %>%
+      left_join(sample.df %>% select(Taxon, GOLD, Sample, Tool), by=join_by(closest_neighbor == Taxon)) %>%
+      left_join(sample.df %>% select(Taxon, PRED), by=join_by(fp == Taxon)) 
+    # 
+    # pairs.fn <- data.frame(fn=colnames(subtree.cophen)[col(subtree.cophen)], 
+    #                     fp=rownames(subtree.cophen)[row(subtree.cophen)], 
+    #                     dist=c(subtree.cophen)) %>%
+    #   group_by(fp) %>% 
+    #   summarize(best_fn = fn[which.min(dist)], min_fn = min(dist)) %>% arrange(min_fn)
+    # 
+    # # Analyse FP and TP
+    # subtree.cophen <- ape::cophenetic.phylo(subtree)[sample.fp %>% pull(Taxon) %>% intersect(shared_taxa), sample.tp %>% pull(Taxon) %>% intersect(shared_taxa), drop=F]
+    # pairs.tp <- data.frame(tp=colnames(subtree.cophen)[col(subtree.cophen)], 
+    #                     fp=rownames(subtree.cophen)[row(subtree.cophen)], 
+    #                     dist=c(subtree.cophen)) %>%
+    #   group_by(fp) %>% 
+    #   summarize(best_tp = tp[which.min(dist)], min_tp = min(dist)) %>% arrange(min_tp) %>%
+    #   left_join(sample.tp %>% select(Taxon, GOLD, Sample, Tool), by=join_by(best_tp == Taxon)) 
+    # 
+    # pairs.tp <- pairs.tp %>% 
+    #   left_join()
+    # browser()
     
     return(pairs)
   }) %>% bind_rows()
@@ -473,22 +584,32 @@ explore_fp_neighborhood <- function(meta, ds.detail) {
   return(new.details)
 }
 
-
-
-
-
-
-
 details_to_binary_stats <- function(new.details, ds.all) {
   if (nrow(new.details) == 0) return(NULL)
-  binary_eval <- new.details %>% filter(Type %in% c("FP", "TP", "FN", "FFP")) %>% count(Sample, Type) %>% pivot_wider(names_from=Type, values_from = n, values_fill = 0)
+  
+  binary_eval <- new.details %>% 
+    filter(Type %in% c("FP", "TP", "FN", "FFP")) %>% 
+    count(Sample, Type, Rank) %>% 
+    pivot_wider(names_from=Type, values_from = n, values_fill = 0)
+  
   colnames(binary_eval)[colnames(binary_eval) == "Sample"] <- "sample"
+  
   if (!"FFP" %in% colnames(binary_eval)) {
     binary_eval$FFP <- 0
   }
-  new_stats <- binary_eval %>% mutate(Sensitivity=sensitivity(TP, FN), Precision=precision(TP, FP), F1=F1(TP, FP, FN)) %>%
+  if (!"FP" %in% colnames(binary_eval)) {
+    binary_eval$FP <- 0
+  }
+  if (!"TP" %in% colnames(binary_eval)) {
+    binary_eval$TP <- 0
+  }
+  if (!"FN" %in% colnames(binary_eval)) {
+    binary_eval$TN <- 0
+  }
+  new_stats <- binary_eval %>% 
+    mutate(Sensitivity=sensitivity(TP, FN), Precision=precision(TP, FP), F1=F1(TP, FP, FN)) %>%
     pivot_longer(c("Sensitivity", "Precision", "F1", "FP", "FN", "TP", "FFP"), names_to="metric") %>%
-    left_join(ds.all %>% filter(rank == "Species") %>% select(sample, dataset, tool, rank) %>% unique(), by="sample", relationship="many-to-many")
+    left_join(ds.all %>% filter(dataset != ALL_DATASET) %>% select(sample, dataset, tool) %>% unique(), by="sample", relationship="many-to-many")
   
   return(new_stats)
 }

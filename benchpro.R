@@ -130,9 +130,12 @@ path_to_rmd_tree <- file.path(sourceDir, "benchpro_sampletrees.Rmd")
 print(paste("args_list: ", args_list))
 print(paste("Rmd: ", path_to_rmd))
 
-print(args_list$tools)
-if (args_list$tools != "") {
-  args_list$tools <- unlist(strsplit(args_list$tools, ','))
+print(paste("tools", args_list$tools, is.null(args_list$tools)))
+
+if (!is.null(args_list$tools)) {
+  if (args_list$tools != "") {
+    args_list$tools <- unlist(strsplit(args_list$tools, ','))
+  }
 }
 
 print(paste(args_list$tools))
